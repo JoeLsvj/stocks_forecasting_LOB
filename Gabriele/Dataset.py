@@ -6,11 +6,12 @@ import pandas as pd
 class TimeSeriesDataset(torch.utils.data.Dataset):
     
     @staticmethod
-    def build_windows(X:np.array, y:np.array, seq_len:int=10, offset:int=0) -> tuple:
-        shape_X = (X.shape[0] - seq_len + 1, seq_len, X.shape[1])
-        shape_y = (y.shape[0] - seq_len + 1, y.shape[1])
+    def build_windows(X:np.array, y:np.array, seq_len_x:int=10, seq_len_y:int=1) -> tuple:
+        seq_len = max(seq_len_x, seq_len_y)
+        shape_X = (X.shape[0] - seq_len, seq_len_x, X.shape[1])
+        shape_y = (y.shape[0] - seq_len, seq_len_y, y.shape[1])
         stride_X = (X.strides[0], X.strides[0], X.strides[1])
-        stride_y = (y.strides[0], y.strides[1])
+        stride_y = (y.strides[0], y.strides[0], y.strides[1])
         
         X = np.lib.stride_tricks.as_strided(X, shape_X, stride_X)
         y = np.lib.stride_tricks.as_strided(y, shape_y, stride_y)
@@ -22,16 +23,21 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
         self,
         X : pd.DataFrame,
         y : pd.DataFrame,
-        seq_len : int = 10,
+        seq_len_x : int = 10,
+        seq_len_y : int = 1,
         offset : int = 0,
         channels: bool = False
     ) -> None:
         self.offset  = offset
-        self.seq_len = seq_len
-        self.length  = len(X) - self.offset - self.seq_len
+        self.seq_len_x = seq_len_x
+        self.seq_len_y = seq_len_y
+        # Convert original time series into a windowed time series
+        self.X, self.y = self.build_windows(X, y, seq_len_x, seq_len_y)
+        # Compute the length of the dataset
+        self.length  = self.X.shape[0] - self.offset
         self.channels = channels
 
-        self.X, self.y = self.build_windows(X, y, seq_len, offset)
+        
 
     
     def __len__(self) -> int:
@@ -41,7 +47,7 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
         if not self.channels:
             return self.X[idx], self.y[idx+self.offset]
         else:
-            return np.expand_dims(self.X[idx], axis=0), self.y[idx+self.offset]
+            return np.expand_dims(self.X[idx], axis=0), np.expand_dims(self.y[idx+self.offset], axis=0)
 
 
 if __name__ == '__main__':
