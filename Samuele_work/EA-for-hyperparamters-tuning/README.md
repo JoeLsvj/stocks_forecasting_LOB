@@ -12,11 +12,14 @@ Data
 
 ### Notebooks
 
+**ga for tuning 3**
+A GA for selecting the best size and number of layers of the model (gene = real numbers)
+
 **Operators for ga for layers**:
 ES crossover and mutation operators for the tuning of the size and number of the layers
 
 **ga for tuning 2**
-A GA for selecting the best size and number of layers of the model 
+A GA for selecting the best size and number of layers of the model (gene = class = solution)
 
 **ga for tuning 1**
 A GA for selecting the best activation function of the model
