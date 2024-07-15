@@ -27,7 +27,7 @@ A GA for selecting the best activation function of the model
 **ea for lr:**
 A GA for founding the best lr of the optimizer of the NN
 
-**change model paramters**
+**change model parameters**
 A NN for image recognition in which in the initialization you can set the parameters of the model 
 
 ### Py
@@ -35,11 +35,14 @@ A NN for image recognition in which in the initialization you can set the parame
 **plot.py**
 It contains functions to plot 
 
-## The EA description 
+## The EA description (version 1.0)
+This version was implemented from the first notebook until notebook *ga for tuning 2* included. 
+
+The reasons about the change are expressed on the notebook *ga for tuning 2*.
 
 ### Super sum of the EA
 - Kind = ($\mu$, $\lambda$) ES + elitism
-- Fitness assessemnt = train loss of the model trained on the training data and tested on the validation data 
+- Fitness assessement = train loss of the model trained on the training data and tested on the validation data 
 - Selection = inverse wheel selection + elitism
 - Stopping criterion = number of fitness assessments    
 
@@ -55,3 +58,11 @@ The generation of the $$ offsprings is created by crossover and mutation on the 
 Finally, the new population is given by the $\lambda - 1 $ offspings and the elite. 
 The stopping criterion is the number of ffitness assessment done. 
 
+## The EA description (version 2.0)
+This version was implemented from notebook *ga for tuning 3* (included) on.
+
+### Super sum of the EA
+- Kind = ($\mu$ + $\lambda$) ES 
+- Fitness assessement = train loss of the model trained on the training data and tested on the validation data 
+- Selection = torunament selection with size proportional to the population size 
+- Stopping criterion = number of fitness assessments    
