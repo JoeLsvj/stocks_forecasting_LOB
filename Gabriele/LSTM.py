@@ -203,6 +203,7 @@ class Astice(nn.Module):
         input_size  : int = 1,
         output_size : int = 1,
         hidden_size : int = 2,
+        lstm_size : int = 2,
         lstm_layers : int = 1,
         seq_len_out : int = 1,
         smooth_conv_channels : int = 1,
@@ -212,6 +213,7 @@ class Astice(nn.Module):
         self.input_size = input_size
         self.output_size = output_size
         self.hidden_size = hidden_size
+        self.lstm_size = lstm_size
         self.lstm_layers = lstm_layers
         self.seq_len_out = seq_len_out
         self.smooth_conv_channels = smooth_conv_channels
@@ -223,16 +225,17 @@ class Astice(nn.Module):
         self.conv2 = nn.Conv1d(input_size, smooth_conv_channels, kernel_size=self.smooth_k_2, padding=self.smooth_k_2//2)
         
         # LSTM layer
-        self.lstm = nn.LSTM(input_size+2*self.smooth_conv_channels, hidden_size, lstm_layers, batch_first=True, bidirectional=False)
+        self.lstm = nn.LSTM(input_size+2*self.smooth_conv_channels, lstm_size, lstm_layers, batch_first=True, bidirectional=False)
         
         # Attention layer
-        self.attention = SelfAttention(hidden_size)
+        self.attention = SelfAttention(lstm_size)
         
         # Output layer
         self.fcnn_out = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size//2),
+            nn.Linear(lstm_size, hidden_size),
+            # nn.LeakyReLU(),
             nn.Tanh(),
-            nn.Linear(hidden_size//2, output_size),
+            nn.Linear(hidden_size, output_size)
         )
         
     def forward(self, x):
@@ -246,17 +249,20 @@ class Astice(nn.Module):
         x = x.permute(0, 2, 1)
         
         # Set initial hidden and cell states
-        h0 = torch.zeros(self.lstm_layers, x.size(0), self.hidden_size).to(x.device)
-        c0 = torch.zeros(self.lstm_layers, x.size(0), self.hidden_size).to(x.device)
+        h0 = torch.zeros(self.lstm_layers, x.size(0), self.lstm_size).to(x.device)
+        c0 = torch.zeros(self.lstm_layers, x.size(0), self.lstm_size).to(x.device)
         
         # Forward propagate LSTM
-        out, (hn, cn) = self.lstm(x, (h0, c0))
+        out, (h_n, c_n) = self.lstm(x, (h0, c0))
         
         # Apply attention mechanism
-        # out = self.attention(out)
+        h_n = self.attention(h_n)
         
         # Decode the hidden state of the last time step
-        out = self.fcnn_out(out[:, -self.seq_len_out:, :])
+        x = h_n.permute(1, 0, 2)
+        
+        # Decode the hidden state of the last time step
+        out = self.fcnn_out(out[:, :self.seq_len_out, :])
         
         return out
     
