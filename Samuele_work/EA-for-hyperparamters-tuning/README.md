@@ -12,6 +12,9 @@ Data
 
 ### Notebooks
 
+**ga for tuning 4**
+A ES for tune lr, af and structure of the NN (currently the notebook is just a copy of the *ga for tuning 3*, i have to update the cells)
+
 **ga for tuning 3**
 A GA for selecting the best size and number of layers of the model (gene = real numbers)
 
