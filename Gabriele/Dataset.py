@@ -10,7 +10,7 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
     def build_windows(X:torch.tensor, y:torch.tensor, seq_len_x:int=10, seq_len_y:int=1) -> tuple:
         seq_len = max(seq_len_x, seq_len_y)
         tot_len = X.shape[0] - seq_len
-        
+
         X_windows = X.unfold(0, seq_len_x, 1).permute(0,2,1)[0:tot_len]
         y_windows = y.unfold(0, seq_len_y, 1).permute(0,2,1)[0:tot_len]
         
@@ -19,8 +19,8 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
     
     def __init__(
         self,
-        X : pd.DataFrame,
-        y : pd.DataFrame,
+        X : torch.tensor,
+        y : torch.tensor,
         seq_len_x : int = 10,
         seq_len_y : int = 1,
         offset : int = 0,
@@ -34,11 +34,6 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
         # Compute the length of the dataset
         self.length  = self.X.shape[0] - self.offset
         self.channels = channels
-        # Save the shape of the dataset
-        self.shape = {
-            'X': self.X.shape,
-            'y': self.y.shape
-        }
     
     def __len__(self) -> int:
         return self.length
@@ -47,7 +42,8 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
         if not self.channels:
             return self.X[idx], self.y[idx+self.offset]
         else:
-            return np.expand_dims(self.X[idx], axis=0), np.expand_dims(self.y[idx+self.offset], axis=0)
+            # return np.expand_dims(self.X[idx], axis=0), np.expand_dims(self.y[idx+self.offset], axis=0)
+            return self.X[idx].unsqueeze(0), self.y[idx+self.offset].unsqueeze(0)
 
 
 if __name__ == '__main__':
