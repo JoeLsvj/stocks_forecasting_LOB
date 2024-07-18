@@ -41,6 +41,21 @@ A NN for image recognition in which in the initialization you can set the parame
 **plot.py**
 It contains functions to plot 
 
+## Bibliography
+**EA for hyper paramter tuning in NN** \
+https://link.springer.com/article/10.1007/s10690-023-09412-z
+
+Idea for the hyper paramter tuning of our NN
+
+**ES understanding**
+https://link.springer.com/book/10.1007/978-3-662-05094-1
+
+Choice of the ES $(\mu,\lambda)$ against the ES $\mu +\lambda$.
+
+**ES understading**
+https://direct.mit.edu/evco/article/1/1/1/1092/An-Overview-of-Evolutionary-Algorithms-for
+
+Choice of the $\mu$ and $\lambda$ parameters in the ES.
 
 ## Deatiled explanation of algorithm used the notebooks
 
