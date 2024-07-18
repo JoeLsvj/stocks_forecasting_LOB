@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 
-
+# BASIC LSTM
 class LSTM(nn.Module):
     
     def __init__(
@@ -162,7 +162,7 @@ class Astice(nn.Module):
       
       
      
-# LSTM + 2D convolutional layers
+# LOB in progress...
 class Aragosta(nn.Module):
 
     def __init__(
