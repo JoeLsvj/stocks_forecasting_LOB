@@ -1,16 +1,15 @@
 # Samuele work folder explanation
 
 ## Folders 
-**Ea for hyperparamters tuning**
+**Ea for hyperparamters tuning** \
 Hyper parameters tuning of a NN
 
-**Pytorch tutorials**
-Pytorch tutorials for NN. 
+**Pytorch tutorials** \
+- Pytorch tutorials for NN. 
+- Pytorch train for NN in which you can specify each paramter during the initialization 
 
-Pytorch train for NN in which you can specify each paramter during the initialization 
-
-**Results**
+**Results** \
 Explanation and plots of all the results found so far
 
-**SL Multy horizon forecasting ...**
+**SL Multy horizon forecasting ...** \
 Code of *Multy horizon forecasting* translated from keras in pytorch
