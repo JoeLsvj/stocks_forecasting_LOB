@@ -17,7 +17,6 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
         
         return X_windows, y_windows
         
-    
     def __init__(
         self,
         X : torch.tensor,
@@ -30,7 +29,6 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
     ) -> None:
         # Assertions
         assert task in {'regression', 'classification'}
-        
         # Store the parameters
         self.offset  = offset
         self.seq_len_x = seq_len_x
@@ -41,7 +39,6 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
         self.X, self.y = self.build_windows(X, y, seq_len_x, seq_len_y)
         # Compute the length of the dataset
         self.length  = self.X.shape[0] - self.offset
-        
     
     def __len__(self) -> int:
         return self.length
@@ -55,10 +52,7 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
         if self.task == 'classification':
             y = y.squeeze().long()
     
-        return x, y
-            
-
-
+        return x, y            
 
 
 
