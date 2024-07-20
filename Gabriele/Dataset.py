@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import pandas as pd
+import enum
 
 
 class TimeSeriesDataset(torch.utils.data.Dataset):
@@ -24,41 +25,41 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
         seq_len_x : int = 10,
         seq_len_y : int = 1,
         offset : int = 0,
-        channels: bool = False
+        channels: bool = False,
+        task : str = 'regression'
     ) -> None:
+        # Assertions
+        assert task in {'regression', 'classification'}
+        
+        # Store the parameters
         self.offset  = offset
         self.seq_len_x = seq_len_x
         self.seq_len_y = seq_len_y
+        self.channels = channels
+        self.task = task
         # Convert original time series into a windowed time series
         self.X, self.y = self.build_windows(X, y, seq_len_x, seq_len_y)
         # Compute the length of the dataset
         self.length  = self.X.shape[0] - self.offset
-        self.channels = channels
+        
     
     def __len__(self) -> int:
         return self.length
     
     def __getitem__(self, idx) -> tuple:
-        if not self.channels:
-            return self.X[idx], self.y[idx+self.offset]
-        else:
-            # return np.expand_dims(self.X[idx], axis=0), np.expand_dims(self.y[idx+self.offset], axis=0)
-            return self.X[idx].unsqueeze(0), self.y[idx+self.offset].unsqueeze(0)
+        x = self.X[idx]
+        y = self.y[idx+self.offset]
+        if self.channels:
+            x = x.unsqueeze(0)
+            y = y.unsqueeze(0)
+        if self.task == 'classification':
+            y = y.squeeze().long()
+    
+        return x, y
+            
 
 
-if __name__ == '__main__':
-    df = pd.read_parquet('../Data/FI-2010-Cleaned/NoAuctionZscore/WRT1V_NoAuction_Zscore.parquet')
-    X,y = df.drop(columns=['Label_10']).values, df['Label_10'].values
-    y = y.reshape(-1,1)
-    dataset = TimeSeriesDataset(X, y, seq_len=10, offset=0, channels=True)
-    
-    print(dataset.X.shape, dataset.y.shape)
-    
-    print('One iteration')
-    for x,y in dataset:
-        print(x.shape, y.shape)
-        break
-    
+
 
 
 class TimeSeriesLoader(torch.utils.data.DataLoader):
