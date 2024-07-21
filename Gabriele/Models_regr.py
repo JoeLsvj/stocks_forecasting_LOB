@@ -162,7 +162,7 @@ class Astice(nn.Module):
       
       
      
-# LOB in progress...
+# Aragosta = DeepLOB
 class Aragosta(nn.Module):
 
     def __init__(
@@ -190,14 +190,23 @@ class Aragosta(nn.Module):
             nn.Conv2d(in_channels=1, out_channels=self.conv_channels, kernel_size=(1, 2), stride=(1,2)),
             nn.LeakyReLU(),
             nn.BatchNorm2d(self.conv_channels),
+            nn.Conv2d(in_channels=self.conv_channels, out_channels=self.conv_channels, kernel_size=(2, 1), stride=(1,1)),
+            nn.LeakyReLU(),
+            nn.BatchNorm2d(self.conv_channels),
         )
         self.cnn_fe_2 = nn.Sequential(
-            nn.Conv2d(in_channels=self.conv_channels, out_channels=self.conv_channels, kernel_size=(1, 2), stride=(1,2)),
+            nn.Conv2d(in_channels=self.conv_channels, out_channels=self.conv_channels, kernel_size=(1, 1), stride=(1,2)),
+            nn.LeakyReLU(),
+            nn.BatchNorm2d(self.conv_channels),
+            nn.Conv2d(in_channels=self.conv_channels, out_channels=self.conv_channels, kernel_size=(2, 1), stride=(1,1)),
             nn.LeakyReLU(),
             nn.BatchNorm2d(self.conv_channels),
         )
         self.cnn_fe_3 = nn.Sequential(
             nn.Conv2d(in_channels=self.conv_channels, out_channels=self.conv_channels, kernel_size=(1, 10), stride=(1,1)),
+            nn.LeakyReLU(),
+            nn.BatchNorm2d(self.conv_channels),
+            nn.Conv2d(in_channels=self.conv_channels, out_channels=self.conv_channels, kernel_size=(2, 1), stride=(1,1)),
             nn.LeakyReLU(),
             nn.BatchNorm2d(self.conv_channels),
         )
@@ -232,14 +241,14 @@ class Aragosta(nn.Module):
         )
         self.fcnn_1 = nn.Sequential(
             nn.Linear(self.inception_channels*4, self.inception_channels*2),
-            # nn.ReLU(),
-            # nn.Linear(self.inception_channels*2, lstm_size)
+            nn.ReLU(),
+            nn.Linear(self.inception_channels*2, lstm_size)
         )
         
         
         
         # LSTM layer
-        self.lstm = nn.LSTM(self.inception_channels*4, lstm_size, lstm_layers, batch_first=True, bidirectional=False)
+        self.lstm = nn.LSTM(lstm_size, lstm_size, lstm_layers, batch_first=True, bidirectional=False)
         
         
         # Output layer

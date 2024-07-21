@@ -43,10 +43,19 @@ def train(
     for epoch in progress_bar:
         model.train()
         for X, y in train_loader:
+            # Move the data to the device
             X, y = X.to(device), y.to(device)
+            
+            # Reset the gradients
             optimizer.zero_grad()
+            
+            # Compute the prediction
             y_pred = model(X)
+            
+            # Compute the loss
             loss = criterion(y_pred, y)
+            
+            # Update the model
             loss.backward()
             optimizer.step()
         
@@ -56,9 +65,16 @@ def train(
             loss_train = 0
             n_elements = 0
             for X, y in train_loader:
+                # Move the data to the device
                 X, y = X.to(device), y.to(device)
+                
+                # Compute the prediction
                 y_pred = model(X)
+                
+                # Compute the loss
                 loss = criterion(y_pred, y)
+                
+                # Update the loss
                 loss_train += loss.item()
                 n_elements += 1
             loss_train /= n_elements
@@ -67,8 +83,13 @@ def train(
             loss_val = 0
             n_elements = 0
             for X, y in val_loader:
+                # Move the data to the device
                 X, y = X.to(device), y.to(device)
+                
+                # Compute the prediction
                 y_pred = model(X)
+                
+                # Compute the loss
                 loss = criterion(y_pred, y)
                 loss_val += loss.item()
                 n_elements += 1
@@ -98,7 +119,6 @@ def evaluate(
     model.eval()
     with torch.no_grad():
         loss = 0
-        n_elements = 0
         for X, y in loader:
             # Move the data to the device
             X, y = X.to(device), y.to(device)
