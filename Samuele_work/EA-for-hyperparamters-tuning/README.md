@@ -12,6 +12,9 @@ Data
 
 ### Notebooks
 
+**ga for tuning 5**
+A GA for selecting the best size and number of layers of the model (gene = real numbers) with refined cycle and operators (following Medvet suggests). 
+
 **ga for tuning all**
 A ES for tune lr, af and structure of the NN (currently the notebook is just a copy of the *ga for tuning 3*, i have to update the cells)
 
@@ -242,6 +245,33 @@ The evolutionary cycle is:
 The CX is k_singlePointCrossover_fitnessBased.
     
 The MUT is adaptive_gaussian_mutation.
+
+### ga for tuning 5
+A GA for selecting the best size and number of layers of the model (gene = real numbers) refined in the cycle and in the operators. 
+
+The spaces are
+- The genotype space is: $2^{\R}$
+- The solution space is: $2^{\N}$
+
+The evolutionary cycle is:
+- Init ($\mu$ individuals)
+- FA 
+  - On: Initial POP ($\mu$)
+- Repeat
+  - Generate offsprings 
+    - Operators on: parents (taken one by one from the population with tournament selection (percentage = 0.5))
+    - Operators: CX or MUT on parents (p to do CX is 80%)
+    - How many: $\lambda$ (a little bit higher then $\mu$)
+  - FA
+    - On: offsprings
+  - Selection 
+    - On: offsprings
+    - kind: truncated selection
+    - How many: $\mu$
+  - Update POP
+    - POP = offsprings 
+  
+The CX is k_singlePointCrossover_fitnessBased.
 
 ## Medvet correction to the version v4
 - First tournament selection = percentage -> 0.5 
