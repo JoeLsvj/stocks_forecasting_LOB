@@ -243,6 +243,13 @@ The CX is k_singlePointCrossover_fitnessBased.
     
 The MUT is adaptive_gaussian_mutation.
 
+## Medvet correction to the version v4
+- First tournament selection = percentage -> 0.5 
+- Prob crossover vs Mutation: 0.8 (0.8 the CX)
+- Second selection = truncated selection (put the element in order, select the bests)
+- usual paramter for mu = 100
+- usual paramter for lambda = 100 (however, lambda should be greater then mu then, a good value is 150)
+
 
 
 
