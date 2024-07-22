@@ -6,6 +6,11 @@ import enum
 
 class TimeSeriesDataset(torch.utils.data.Dataset):
     
+    # Tasks enumeration
+    class Task(enum.Enum):
+        REGRESSION = 'regression'
+        CLASSIFICATION = 'classification'
+    
     @staticmethod
     #def build_windows(X:np.array, y:np.array, seq_len_x:int=10, seq_len_y:int=1) -> tuple:
     def build_windows(X:torch.tensor, y:torch.tensor, seq_len_x:int=10, seq_len_y:int=1) -> tuple:
@@ -25,10 +30,8 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
         seq_len_y : int = 1,
         offset : int = 0,
         channels: bool = False,
-        task : str = 'regression'
+        task : Task = Task.REGRESSION
     ) -> None:
-        # Assertions
-        assert task in {'regression', 'classification'}
         # Store the parameters
         self.offset  = offset
         self.seq_len_x = seq_len_x
@@ -49,11 +52,10 @@ class TimeSeriesDataset(torch.utils.data.Dataset):
         if self.channels:
             x = x.unsqueeze(0)
             y = y.unsqueeze(0)
-        if self.task == 'classification':
-            y = y.squeeze().long()
+        if self.task == self.Task.CLASSIFICATION:
+            y = y.squeeze()
     
         return x, y            
-
 
 
 class TimeSeriesLoader(torch.utils.data.DataLoader):

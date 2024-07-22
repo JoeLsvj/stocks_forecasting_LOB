@@ -144,5 +144,116 @@ def evaluate(
         'losses': losses
     }
     
-def sMAPE(y_true, y_pred):
-    return 100 * np.mean(2 * np.abs(y_pred - y_true) / (np.abs(y_true) + np.abs(y_pred)))
+
+class Metrics:
+    
+    def __init__(self) -> None:
+        pass
+    
+    @staticmethod
+    def sMAPE(y_true, y_pred):
+        return 100 * np.mean(2 * np.abs(y_pred - y_true) / (np.abs(y_true) + np.abs(y_pred)))
+
+
+
+
+class ModelTools:
+    
+    def __init__(self) -> None:
+        pass
+    
+    @staticmethod
+    def save_model(model, path, full=False):
+        if full:
+            torch.save(model, path)
+        else:
+            torch.save(model.state_dict(), path)
+
+    @staticmethod
+    def build_model(model_class, params):
+        model = model_class(**params)
+        return model
+
+
+class DataTools:
+    
+    def __init__(self) -> None:
+        pass
+    
+    
+    @staticmethod
+    def split_x_y(df, target):
+        X = df.drop(target, axis=1)
+        y = df[target]
+        return X.values, y.values
+    
+    @staticmethod
+    def numpy_to_tensor(*args, device, dtype):
+        return [torch.tensor(arg, dtype=dtype).to(device) for arg in args]
+    
+    @staticmethod
+    def train_val_test_split(df, train_size=0.7, val_size=0.15, test_size=0.15):
+        assert train_size + val_size + test_size == 1, 'The sum of the sizes must be equal to 1'
+        assert train_size > 0 and val_size > 0 and test_size > 0, 'The sizes must be greater than 0'
+        
+        split_idx = int(train_size * len(df))
+        train = df.iloc[:split_idx].copy()
+        split_idx += int(val_size * len(df))
+        val = df.iloc[split_idx-int(val_size * len(df)):split_idx].copy()
+        test = df.iloc[split_idx:].copy()
+        
+        return train, val, test
+    
+
+    # Function which returns the cross fold validation sets for the fi-2010 dataset
+    # 0 -> 1, 2
+    # 1 -> (1+2), 3
+    # 2 -> (1+2+3), 4
+    # ...
+    @staticmethod
+    def cross_fold_timeseries(df):
+        # create generator
+        days = df['Day'].unique().tolist()
+        for i,day in enumerate(days[1:]):
+            print('Day:', day)
+            train_set, val_set, test_set = None, None, None
+            
+            if i == 0:
+                # Case in which there are only two days
+                test = df[df['Day'] == day]
+                tmp = df[df['Day'] < day]
+                idx_split = int(0.7 * len(tmp))
+                train = tmp.iloc[:idx_split]
+                val = tmp.iloc[idx_split:]
+                
+                train_set = train
+                val_set = val
+                test_set = test            
+            else:
+                # Case in which there are more than two days
+                test = df[df['Day'] == day]
+                tmp = df[df['Day'] < day-1]
+                middle_day = df[df['Day'] == day-1]
+                idx_split = int(0.7 * len(middle_day))
+                train = pd.concat([tmp, middle_day.iloc[:idx_split]])
+                val = middle_day.iloc[idx_split:]
+                
+                train_set = train
+                val_set = val
+                test_set = test
+            
+            yield train_set, val_set, test_set
+        
+
+        
+if __name__ == '__main__':
+    # Test the cross_fold_timeseries function
+    df = pd.read_parquet('../Data/FI-2010-Cleaned/NoAuction/Zscore/KESBV.parquet')
+    for train_set, val_set, test_set in DataTools.cross_fold_timeseries(df):
+        print('Train:', train_set['Day'].unique())
+        print('shape:', train_set.shape)
+        print('Val:', val_set['Day'].unique())
+        print('shape:', val_set.shape)
+        print('Test:', test_set['Day'].unique())
+        print('shape:', test_set.shape)
+        print()
