@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import tabulate
 import tqdm.notebook as tqdm
+import Dataset
 
 
 class FeaturesExtractionLOB:
@@ -173,6 +174,46 @@ class ModelTools:
     def build_model(model_class, params):
         model = model_class(**params)
         return model
+
+    @staticmethod
+    def ht_train_wrapper(dataset_train, dataset_val, model_class, params, device):
+        batch_size = params['batch_size']
+        n_epochs = params['n_epochs']
+        lr = params['lr']
+        # Delete the keys
+        del params['batch_size']
+        del params['n_epochs']
+        del params['lr']
+        # Build the data loaders
+        train_loader = Dataset.TimeSeriesLoader(
+            dataset = dataset_train,
+            batch_size = batch_size,
+            shuffle=True
+        )
+        val_loader = Dataset.TimeSeriesLoader(
+            dataset = dataset_val,
+            batch_size = batch_size,
+            shuffle=False
+        )
+        # Build the model
+        model = ModelTools.build_model(model_class, params).to(device)
+        # Build the optimizer and the loss function
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        criterion = torch.nn.CrossEntropyLoss()
+        # Train the model
+        results = train(
+            train_loader = train_loader,
+            val_loader = val_loader,
+            model = model,
+            optimizer = optimizer,
+            criterion = criterion,
+            device = device,
+            n_epochs = n_epochs
+        )
+        # Average the last 5 losses on the validation set
+        avg_loss = np.mean(results['losses_val'][-5:])
+        # Return negative loss, since the bayesian optimization is a maximization problem
+        return -avg_loss
 
 
 class DataTools:
