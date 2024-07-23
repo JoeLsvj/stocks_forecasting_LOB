@@ -165,7 +165,8 @@ class Aragosta(nn.Module):
         lstm_size : int = 2,
         lstm_layers : int = 1,
         conv_channels : int = 1,
-        inception_channels : int = 1
+        inception_channels : int = 1,
+        dropout_rate : float = 0.1
     ):
         super(Aragosta, self).__init__()
         # Save model hyperparameters
@@ -176,6 +177,10 @@ class Aragosta(nn.Module):
         self.lstm_layers = lstm_layers
         self.conv_channels = conv_channels
         self.inception_channels = inception_channels
+        self.dropout_rate = dropout_rate
+        
+        # Dropout layer
+        self.dropout = nn.Dropout(self.dropout_rate)
         
         # 2D convolutional layers for feature extraction
         self.cnn_fe_1 = nn.Sequential(
@@ -225,6 +230,7 @@ class Aragosta(nn.Module):
         self.fcnn_1 = nn.Sequential(
             nn.Linear(self.inception_channels*4, self.inception_channels*2),
             nn.LeakyReLU(),
+            self.dropout,
             nn.Linear(self.inception_channels*2, lstm_size)
         )
         
@@ -234,6 +240,7 @@ class Aragosta(nn.Module):
         # Output layer
         self.fcnn_input_size = lstm_size * lstm_layers
         self.fcnn_2 = nn.Sequential(
+            self.dropout,
             nn.Linear(self.fcnn_input_size, hidden_size),
             nn.LeakyReLU(),
             nn.Linear(hidden_size, output_size)
