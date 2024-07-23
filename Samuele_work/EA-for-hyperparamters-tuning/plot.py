@@ -32,6 +32,18 @@ def plot_3_histories(history1, history2, history3, title, label_plot1, label_plo
     plt.grid(True)
     plt.show()
 
+def plot_3_histories(history1, history2, history3, history4, title, label_plot1, label_plot2, label_plot3, label_plot4):
+    epochs = range(1, len(history1) + 1)
+    plt.plot(epochs, history1, label=label_plot1)
+    plt.plot(epochs, history2, label=label_plot2)
+    plt.plot(epochs, history3, label=label_plot3)
+    plt.plot(epochs, history4, label=label_plot4)
+    plt.title(title)
+    plt.xlabel('Epochs')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
 def plot_5_histories(history1, history2, history3, history4, history5, title, labels):
     epochs = range(1, len(history1) + 1)
     plt.plot(epochs, history1, label=labels[0])
