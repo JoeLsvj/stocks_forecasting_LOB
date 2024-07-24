@@ -107,6 +107,95 @@ def train(
     }
 
 
+
+def custom_train(
+    train_loader : torch.utils.data.DataLoader,
+    val_loader   : torch.utils.data.DataLoader,
+    model        : torch.nn.Module,
+    optimizer    : torch.optim.Optimizer,
+    criterion,
+    device       : torch.device,
+    n_epochs     : int,
+):
+    progress_bar = tqdm.tqdm(range(n_epochs), desc='Training')
+    losses_train = []
+    losses_val = []
+    
+    for epoch in progress_bar:
+        model.train()
+        for X, y in train_loader:
+            # Move the data to the device
+            X, y = X.to(device), y.to(device)
+            
+            # Reset the gradients
+            optimizer.zero_grad()
+            
+            # Compute the prediction
+            y_pred = model(X)
+            
+            # Compute the loss
+            loss = 0
+            for i in range(y_pred.shape[1]):
+                loss += criterion(y_pred[:, i, :], y[:, i])
+            
+            # Update the model
+            loss.backward()
+            optimizer.step()
+        
+        # Evaluate the model on the validation set
+        model.eval()
+        with torch.no_grad():
+            loss_train = 0
+            n_elements = 0
+            for X, y in train_loader:
+                # Move the data to the device
+                X, y = X.to(device), y.to(device)
+                
+                # Compute the prediction
+                y_pred = model(X)
+                
+                # Compute the loss
+                loss = 0
+                for i in range(y_pred.shape[1]):
+                    loss += criterion(y_pred[:, i, :], y[:, i])
+                
+                # Update the loss
+                loss_train += loss.item()
+                n_elements += 1
+            loss_train /= n_elements
+            losses_train.append(loss_train)
+            
+            loss_val = 0
+            n_elements = 0
+            for X, y in val_loader:
+                # Move the data to the device
+                X, y = X.to(device), y.to(device)
+                
+                # Compute the prediction
+                y_pred = model(X)
+                
+                # Compute the loss
+                loss = 0
+                for i in range(y_pred.shape[1]):
+                    loss += criterion(y_pred[:, i, :], y[:, i])
+                
+                # Update the loss
+                loss_val += loss.item()
+                n_elements += 1
+            loss_val /= n_elements
+            losses_val.append(loss_val)
+        
+        # Update the progress bar    
+        progress_bar.set_postfix({'loss_train': loss_train, 'loss_val': loss_val})
+        
+    return {
+        'model': model,
+        'losses_train': losses_train,
+        'losses_val': losses_val
+    }
+
+
+
 def evaluate(
     loader   : torch.utils.data.DataLoader,
     model    : torch.nn.Module,
@@ -201,7 +290,11 @@ class ModelTools:
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         criterion = torch.nn.CrossEntropyLoss()
         # Train the model
+<<<<<<< HEAD
+        results = custom_train(
+=======
         results = train(
+>>>>>>> refs/remotes/origin/main
             train_loader = train_loader,
             val_loader = val_loader,
             model = model,
@@ -212,6 +305,15 @@ class ModelTools:
         )
         # Average the last 5 losses on the validation set
         avg_loss = np.mean(results['losses_val'][-5:])
+<<<<<<< HEAD
+
+        # Model name
+        model_name = f'{model_class.__name__}_{batch_size}_{n_epochs}_{lr}_{avg_loss:.2f}'
+        # Save the model
+        ModelTools.save_model(model, f'../Models/{model_name}.pth')
+        
+=======
+>>>>>>> refs/remotes/origin/main
         # Return negative loss, since the bayesian optimization is a maximization problem
         return -avg_loss
 

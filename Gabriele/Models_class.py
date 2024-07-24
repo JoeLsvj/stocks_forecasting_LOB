@@ -69,6 +69,84 @@ class LSTM(nn.Module):
                  nn.init.orthogonal_(param)
 
 
+class CustomLSTM(nn.Module):
+    
+    def __init__(
+        self,
+        input_size  : int = 1,
+        output_size : int = 1,
+        hidden_size : int = 2,
+        num_layers  : int = 1,
+        dropout     : float = 0.1,
+        device      : torch.device = torch.device('cpu')
+    ):
+        super(CustomLSTM, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        
+        # LSTM layer
+        self.lstm = nn.LSTM(hidden_size, hidden_size, num_layers=num_layers, batch_first=True, bidirectional=False)
+        # Fully connected layer
+        self.activation = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
+        self.fcnn_input_size = self.hidden_size*self.num_layers
+        self.fcnn_1 = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            self.activation,
+            self.dropout,
+            nn.Linear(hidden_size, hidden_size),
+        )
+
+        self.softmax = nn.Softmax(dim=1)
+        
+        # Output
+        self.n_features = 5
+        self.fcnn_out = nn.ModuleList([
+            nn.Sequential(
+                self.dropout,
+                nn.Linear(self.fcnn_input_size, hidden_size),
+                self.activation,
+                nn.Linear(hidden_size, 3)
+            ) for _ in range(self.n_features)
+        ])
+        
+        # Initialize weights
+        self.init_wheights()
+        
+    def forward(self, x):
+        batch_size = x.size(0)
+        
+        # Fully connected layer 1
+        x = self.fcnn_1(x)
+        
+        # Forward propagate LSTM
+        _, (hn, _) = self.lstm(x)
+        
+        # Decode the hidden state of the last time step
+        # seq_len, batch, size -> batch, seq_len, size -> batch, size*seq_len
+        x = hn.permute(1, 0, 2).reshape(batch_size, -1)
+        
+        # Apply the output layers
+        out = [ fcnn(x) for fcnn in self.fcnn_out ]
+        out = [ self.softmax(o) for o in out ]
+        out = torch.cat(out, dim=1)
+        
+        out = out.view(batch_size, self.n_features, 3)
+        
+        return out
+
+    def init_wheights(self):
+        for name, param in self.lstm.named_parameters():
+            if 'bias' in name:
+                 nn.init.constant_(param, 0.0)
+            elif 'weight_ih' in name:
+                 nn.init.kaiming_normal_(param)
+            elif 'weight_hh' in name:
+                 nn.init.orthogonal_(param)
+
+
 
 # LSTM + 1D smoothing convolutional layers
 class Astice(nn.Module):
