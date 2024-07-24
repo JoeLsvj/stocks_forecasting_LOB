@@ -235,15 +235,6 @@ def evaluate(
     }
     
 
-class Metrics:
-    
-    def __init__(self) -> None:
-        pass
-    
-    @staticmethod
-    def sMAPE(y_true, y_pred):
-        return 100 * np.mean(2 * np.abs(y_pred - y_true) / (np.abs(y_true) + np.abs(y_pred)))
-
 
 
 
@@ -290,11 +281,7 @@ class ModelTools:
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         criterion = torch.nn.CrossEntropyLoss()
         # Train the model
-<<<<<<< HEAD
         results = custom_train(
-=======
-        results = train(
->>>>>>> refs/remotes/origin/main
             train_loader = train_loader,
             val_loader = val_loader,
             model = model,
@@ -305,15 +292,12 @@ class ModelTools:
         )
         # Average the last 5 losses on the validation set
         avg_loss = np.mean(results['losses_val'][-5:])
-<<<<<<< HEAD
 
         # Model name
         model_name = f'{model_class.__name__}_{batch_size}_{n_epochs}_{lr}_{avg_loss:.2f}'
         # Save the model
         ModelTools.save_model(model, f'../Models/{model_name}.pth')
         
-=======
->>>>>>> refs/remotes/origin/main
         # Return negative loss, since the bayesian optimization is a maximization problem
         return -avg_loss
 
@@ -387,7 +371,6 @@ class DataTools:
             
             yield train_set, val_set, test_set
         
-
         
 if __name__ == '__main__':
     # Test the cross_fold_timeseries function
