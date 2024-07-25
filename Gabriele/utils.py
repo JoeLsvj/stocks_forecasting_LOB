@@ -307,7 +307,6 @@ class DataTools:
     def __init__(self) -> None:
         pass
     
-    
     @staticmethod
     def split_x_y(df, target):
         X = df.drop(target, axis=1)

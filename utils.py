@@ -154,7 +154,7 @@ class ModelTools:
         return -avg_loss
 
     @staticmethod
-    def train(model_id, model, criterion, optimizer, trainloader, valloader, epochs, save:bool):
+    def train(model_id, model, criterion, optimizer, trainloader, valloader, epochs, save:bool, device):
         training_info = {
             'train_loss': [],
             'val_loss': [],
@@ -174,7 +174,7 @@ class ModelTools:
             start = time.time()
             for inputs, labels in trainloader:
                 # move data to GPU, if available
-                inputs, labels = inputs.to(model.device), labels.to(model.device)
+                inputs, labels = inputs.to(device), labels.to(device)
                 # zero the parameter gradients
                 optimizer.zero_grad()
                 # Forward pass
@@ -197,7 +197,7 @@ class ModelTools:
             val_loss = []
             with torch.no_grad():
                 for inputs, labels in valloader:
-                    inputs, labels = inputs.to(model.device), labels.to(model.device)
+                    inputs, labels = inputs.to(device), labels.to(device)
                     outputs = model(inputs)
                     loss = criterion(outputs, labels)
                     val_loss.append(loss.item())
@@ -236,14 +236,14 @@ class ModelTools:
 
         return training_info
     
-    def evaluate(dataloader, model, accname, loss, regression:bool):
+    def evaluate(dataloader, model, accname, loss, regression:bool, device):
         # torch.no_grad() is used only for the assessing/validation phase only. 
         # When you only perform validation, gradients are not needed for backward phase.
         true = []
         pred = []
         with torch.no_grad():
             for inputs, labels in dataloader:
-                inputs, labels = inputs.to(model.device), labels.to(model.device)
+                inputs, labels = inputs.to(device), labels.to(device)
                 outputs = model(inputs)
                 
                 true.append(inputs)

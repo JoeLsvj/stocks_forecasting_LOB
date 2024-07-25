@@ -95,8 +95,8 @@ class LSTM2(nn.Module):
         x = h_n.permute(1, 0, 2).reshape(batchsize, -1)
         x = self.dropout(x)
         predictions = self.linear_3(x)
-        #predictions = torch.squeeze(predictions)
-        return predictions
+        
+        return predictions.unsqueeze(1)
 
 
 # encoder-decoder LSTM with attention mechanism
@@ -168,8 +168,8 @@ class LSTMWithAttention(nn.Module):
         # final linear layer
         x = self.dropout(x)
         predictions = self.linear_out(x)
-        #predictions = torch.squeeze(predictions)
-        return predictions
+        
+        return predictions.unsqueeze(1)
 
     def init_weights(self):
         for name, param in self.encoder.named_parameters():
@@ -298,11 +298,18 @@ class LobCNN(nn.Module):
             nn.BatchNorm2d(self.inception_channels),
         )
 
+        # Output FCNN
+        self.fcnn_out = nn.Sequential(
+            nn.Dropout(0.1),
+            nn.Linear(self.inception_channels, self.inception_channels),
+            nn.LeakyReLU(),
+            nn.Linear(self.inception_channels, self.output_size)
+        )
+
         # RNN or lstm layer(s)
         self.dropout = nn.Dropout(0.1)
-        self.gru = nn.GRU(input_size=self.inception_channels*4, hidden_size=self.inception_channels, num_layers=elf.lstm_layers, batch_first=True)
+        self.gru = nn.GRU(input_size=self.inception_channels*4, hidden_size=self.inception_channels, num_layers=self.lstm_layers, batch_first=True)
         self.lstm = nn.LSTM(input_size=self.inception_channels*4, hidden_size=self.inception_channels, num_layers=self.lstm_layers, batch_first=True)
-        self.linear_out = nn.Linear(self.inception_channels, self.output_size)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -315,21 +322,18 @@ class LobCNN(nn.Module):
         x_inception_4 = self.inception_4(x)
 
         x = torch.cat((x_inception_1, x_inception_2, x_inception_3, x_inception_4), dim=1)
-        x = x.permute(0, 2, 1, 3)
-        x = torch.reshape(x, (-1, x.shape[1], x.shape[2]))
-        x = self.dropout(x)
+        x = x.permute(0, 2, 1, 3).squeeze(3)
+        #x = torch.reshape(x, (-1, x.shape[1], x.shape[2]))
+        #x = self.dropout(x)
 
         h0 = torch.zeros(self.lstm_layers, x.size(0), self.inception_channels).to(self.device)
         c0 = torch.zeros(self.lstm_layers, x.size(0), self.inception_channels).to(self.device)
         x, _ = self.lstm(x, (h0, c0))
         x = x[:, -1, :]
-        x = self.linear_out(x)
-        if self.regression:
-            #x = torch.squeeze(x)
-            return x
-        else:
-            forecast_y = torch.softmax(x, dim=1)
-            return forecast_y
+
+        x = self.fcnn_out(x).unsqueeze(1).unsqueeze(1)
+
+        return x
         
         # fixed params sizes
         #torch.Size([32, 1, 100, 40])
