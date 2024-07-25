@@ -8,15 +8,10 @@ Past files, not still used
 **Data**
 Data 
 
-## Files
-
-### Notebooks
+**Single tuning**
 
 **ga for tuning 5**
 A GA for selecting the best size and number of layers of the model (gene = real numbers) with refined cycle and operators (following Medvet suggests). 
-
-**ga for tuning all**
-A ES for tune lr, af and structure of the NN (currently the notebook is just a copy of the *ga for tuning 3*, i have to update the cells)
 
 **ga for tuning 4**
 A GA for selecting the best size and number of layers of the model (gene = real numbers) with refined cycle and operators. 
@@ -39,7 +34,28 @@ A GA for founding the best lr of the optimizer of the NN
 **change model parameters**
 A NN for image recognition in which in the initialization you can set the parameters of the model 
 
+## Files
+
+### Notebooks
+
+**es classification clean**
+Notebook with functions called from another file: *es classification functions*
+
+An ES for tuning number of units, lr and dropout of the classification model we have done. 
+
+**es classification complete**
+Complete notebook
+
+An ES for tuning number of units, lr and dropout of the classification model we have done. 
+
+**ga for tuning all**
+A ES for tune lr, af and structure of the NN (currently the notebook is just a copy of the *ga for tuning 3*, i have to update the cells)
+
+
 ### Py
+
+**es classification functions**
+All the evolutionary function needed for the classification tuning.
 
 **plot.py**
 It contains functions to plot 
