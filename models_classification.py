@@ -3,73 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-
-# BASIC LSTM
 class LSTM(nn.Module):
-    
-    def __init__(
-        self,
-        input_size  : int = 1,
-        output_size : int = 1,
-        hidden_size : int = 2,
-        num_layers  : int = 1,
-        dropout     : float = 0.1
-    ):
-        super(LSTM, self).__init__()
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        
-        # LSTM layer
-        self.lstm = nn.LSTM(hidden_size, hidden_size, num_layers=num_layers, batch_first=True, bidirectional=False)
-        # Fully connected layer
-        self.activation = nn.ReLU()
-        self.dropout = nn.Dropout(dropout)
-        self.fcnn_input_size = self.hidden_size*self.num_layers
-        self.fcnn_1 = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            self.activation,
-            self.dropout,
-            nn.Linear(hidden_size, hidden_size),
-        )
-        self.fcnn_2 = nn.Sequential(
-            self.dropout,
-            nn.Linear(self.fcnn_input_size, hidden_size),
-            self.activation,
-            nn.Linear(hidden_size, output_size)
-        )
-        self.softmax = nn.Softmax(dim=1)
-        
-        # Initialize weights
-        self.init_wheights()
-        
-    def forward(self, x):
-        batch_size = x.size(0)
-        
-        # Fully connected layer 1
-        x = self.fcnn_1(x)
-        
-        # Forward propagate LSTM
-        _, (hn, _) = self.lstm(x)
-        
-        # Decode the hidden state of the last time step
-        # seq_len, batch, size -> batch, seq_len, size -> batch, size*seq_len
-        x = hn.permute(1, 0, 2).reshape(batch_size, -1)
-        out = self.fcnn_2(x)
-        out = self.softmax(out)
-        
-        return out
-
-    def init_wheights(self):
-        for name, param in self.lstm.named_parameters():
-            if 'bias' in name:
-                 nn.init.constant_(param, 0.0)
-            elif 'weight_ih' in name:
-                 nn.init.kaiming_normal_(param)
-            elif 'weight_hh' in name:
-                 nn.init.orthogonal_(param)
-
-
-class CustomLSTM(nn.Module):
     
     def __init__(
         self,
@@ -80,7 +14,7 @@ class CustomLSTM(nn.Module):
         dropout     : float = 0.1,
         device      : torch.device = torch.device('cpu')
     ):
-        super(CustomLSTM, self).__init__()
+        super(LSTM, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
         self.hidden_size = hidden_size
@@ -159,6 +93,7 @@ class Astice(nn.Module):
         lstm_size : int = 2,
         lstm_layers : int = 1,
         smooth_conv_channels : int = 1,
+        drouput_rate : float = 0.2
     ):
         super(Astice, self).__init__()
         # Save model hyperparameters
@@ -168,6 +103,7 @@ class Astice(nn.Module):
         self.lstm_size = lstm_size
         self.lstm_layers = lstm_layers
         self.smooth_conv_channels = smooth_conv_channels
+        self.drouput_rate = drouput_rate
         
         # Smooth convolutional layers run in parallel
         self.smooth_k_1 = 3
@@ -187,12 +123,25 @@ class Astice(nn.Module):
         
         
         # Output layer
+        self.activation = nn.LeakyReLU()
+        self.softmax = nn.Softmax(dim=1)
+        self.dropout = nn.Dropout(self.drouput_rate)
         self.fcnn_input_size = lstm_size * lstm_layers
-        self.fcnn_2 = nn.Sequential(
-            nn.Linear(self.fcnn_input_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, output_size)
-        )
+        #self.fcnn_2 = nn.Sequential(
+        #    nn.Linear(self.fcnn_input_size, hidden_size),
+        #    nn.ReLU(),
+        #    nn.Linear(hidden_size, output_size)
+        #)
+        self.n_features = 5
+        self.fcnn_out = nn.ModuleList([
+            nn.Sequential(
+                self.dropout,
+                nn.Linear(self.fcnn_input_size, hidden_size),
+                self.activation,
+                nn.Linear(hidden_size, 3)
+            ) for _ in range(self.n_features)
+        ])
+
         
     def forward(self, x):
         batch_size = x.size(0)
@@ -216,9 +165,13 @@ class Astice(nn.Module):
         x = h_n.permute(1, 0, 2).reshape(batch_size, -1)
         
         # Decode the hidden state of the last time step
-        out = self.fcnn_2(x)
+        out = [ fcnn(x) for fcnn in self.fcnn_out ]
+        out = [ self.softmax(o) for o in out ]
+        out = torch.cat(out, dim=1)
         
-        return out.unsqueeze(1)
+        out = out.view(batch_size, self.n_features, 3)
+        
+        return out
     
     def init_weights(self):
         for name, param in self.lstm.named_parameters():
