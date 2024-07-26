@@ -6,6 +6,7 @@ import torch
 import numpy as np
 #from tqdm import tqdm
 from sklearn.metrics import r2_score, roc_auc_score
+import dataset as Dataset
 
 
 def make_progress_bar(counter, iterations, suffix=''):
@@ -113,7 +114,7 @@ class ModelTools:
         return model
 
     @staticmethod
-    def ht_train_wrapper(dataset_train, dataset_val, model_class, params, device):
+    def ht_train_wrapper(dataset_train, dataset_val, model_class, params, device, criterion):
         batch_size = params['batch_size']
         n_epochs = params['n_epochs']
         lr = params['lr']
@@ -136,16 +137,17 @@ class ModelTools:
         model = ModelTools.build_model(model_class, params).to(device)
         # Build the optimizer and the loss function
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-        criterion = torch.nn.CrossEntropyLoss()
         # Train the model
-        results = train(
+        results = ModelTools.train(
+            model_id = 'ht_model',
             train_loader = train_loader,
             val_loader = val_loader,
             model = model,
             optimizer = optimizer,
             criterion = criterion,
             device = device,
-            n_epochs = n_epochs
+            n_epochs = n_epochs,
+            save=False
         )
         # Average the last 5 losses on the validation set
         avg_loss = np.mean(results['val_loss'][-5:])
@@ -154,7 +156,7 @@ class ModelTools:
         return -avg_loss
 
     @staticmethod
-    def train(model_id, model, criterion, optimizer, trainloader, valloader, epochs, save:bool, device):
+    def train(model_id, model, criterion, optimizer, train_loader, val_loader, n_epochs, save:bool, device):
         training_info = {
             'train_loss': [],
             'val_loss': [],
@@ -163,16 +165,16 @@ class ModelTools:
         best_val_epoch = np.inf
         print("Start training...\n")
 
-        for epoch in range(epochs):
+        for epoch in range(n_epochs):
             train_loss = []
             train_accuracy = []
-            make_progress_bar(epoch, epochs, suffix=f' starting epoch {epoch + 1}')
+            make_progress_bar(epoch, n_epochs, suffix=f' starting epoch {epoch + 1}')
             
             # train the model
             model.train()
             
             start = time.time()
-            for inputs, labels in trainloader:
+            for inputs, labels in train_loader:
                 # move data to GPU, if available
                 inputs, labels = inputs.to(device), labels.to(device)
                 # zero the parameter gradients
@@ -196,7 +198,7 @@ class ModelTools:
             model.eval()
             val_loss = []
             with torch.no_grad():
-                for inputs, labels in valloader:
+                for inputs, labels in val_loader:
                     inputs, labels = inputs.to(device), labels.to(device)
                     outputs = model(inputs)
                     loss = criterion(outputs, labels)
@@ -215,7 +217,7 @@ class ModelTools:
                 best_val_epoch = epoch
                 print('model saved')
 
-            print(f'Epoch {epoch + 1}/{epochs}, '
+            print(f'Epoch {epoch + 1}/{n_epochs}, '
                 f'Train Loss: {train_loss:.8f}, Val Loss: {val_loss: .8f}, ')
             
             # stat_file = open('./stats/' + model_id + '.txt', 'a')
@@ -225,7 +227,7 @@ class ModelTools:
         # save the final results after the training
         if save:
             torch.save({
-                'epoch': epochs,
+                'epoch': n_epochs,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': train_loss,
