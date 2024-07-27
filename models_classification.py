@@ -93,7 +93,7 @@ class Astice(nn.Module):
         lstm_size : int = 2,
         lstm_layers : int = 1,
         smooth_conv_channels : int = 1,
-        drouput_rate : float = 0.2
+        dropout_rate : float = 0.2
     ):
         super(Astice, self).__init__()
         # Save model hyperparameters
@@ -103,7 +103,7 @@ class Astice(nn.Module):
         self.lstm_size = lstm_size
         self.lstm_layers = lstm_layers
         self.smooth_conv_channels = smooth_conv_channels
-        self.drouput_rate = drouput_rate
+        self.dropout_rate = dropout_rate
         
         # Smooth convolutional layers run in parallel
         self.smooth_k_1 = 3
@@ -125,7 +125,7 @@ class Astice(nn.Module):
         # Output layer
         self.activation = nn.LeakyReLU()
         self.softmax = nn.Softmax(dim=1)
-        self.dropout = nn.Dropout(self.drouput_rate)
+        self.dropout = nn.Dropout(self.dropout_rate)
         self.fcnn_input_size = lstm_size * lstm_layers
         #self.fcnn_2 = nn.Sequential(
         #    nn.Linear(self.fcnn_input_size, hidden_size),

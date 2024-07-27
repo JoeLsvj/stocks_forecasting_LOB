@@ -4,7 +4,8 @@ import time
 import pickle
 import torch
 import numpy as np
-#from tqdm import tqdm
+import pandas as pd
+from tqdm.auto import tqdm
 from sklearn.metrics import r2_score, roc_auc_score
 import dataset as Dataset
 
@@ -163,17 +164,16 @@ class ModelTools:
         }
         best_val_loss = np.inf
         best_val_epoch = np.inf
-        print("Start training...\n")
 
-        for epoch in range(n_epochs):
+        progress_bar = tqdm(range(n_epochs), desc='Training')
+
+        for epoch in progress_bar:
             train_loss = []
             train_accuracy = []
-            make_progress_bar(epoch, n_epochs, suffix=f' starting epoch {epoch + 1}')
             
             # train the model
             model.train()
             
-            start = time.time()
             for inputs, labels in train_loader:
                 # move data to GPU, if available
                 inputs, labels = inputs.to(device), labels.to(device)
@@ -188,8 +188,6 @@ class ModelTools:
                 optimizer.step()
                 # store the performances on the train set directly during the training epochs
                 train_loss.append(loss.item())
-            end = time.time()
-            print(f'Duration of training epoch {epoch + 1}: {end - start}, seconds')
             # Get train loss and val loss
             train_loss = np.mean(train_loss, dtype=np.float64)
             
@@ -216,13 +214,11 @@ class ModelTools:
                 best_val_loss = val_loss
                 best_val_epoch = epoch
                 print('model saved')
-
-            print(f'Epoch {epoch + 1}/{n_epochs}, '
-                f'Train Loss: {train_loss:.8f}, Val Loss: {val_loss: .8f}, ')
             
             # stat_file = open('./stats/' + model_id + '.txt', 'a')
             # stat_file.write(f'{epoch+1},{train_loss},{val_loss}')
             # stat_file.close()
+            progress_bar.set_postfix({'loss_train': train_loss, 'loss_val': val_loss})
         
         # save the final results after the training
         if save:
