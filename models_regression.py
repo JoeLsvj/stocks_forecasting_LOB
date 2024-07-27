@@ -187,30 +187,39 @@ class LSTMWithAttention(nn.Module):
             elif 'weight_hh' in name:
                  nn.init.orthogonal_(param)
 
+
 class LobCNN(nn.Module):
     def __init__(   self,
-                    lookback_period = 100,
-                    inner_convolutional_layers = 2,
-                    smoothing_percentage = 0.06,
+                    vertical_convolutional_layers = 2,
+                    vertical_kernel_size = 4,
+                    smoothing:bool = False,
                     convolution_channels = 32,
                     inception_channels = 64,
                     lstm_layers = 2,
+                    latent_size = 64,
                     output_size = 1,
-                    regression = True,
                 ):
         super(LobCNN, self).__init__()
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.name = 'LobCNN'
 
-        self.regression = regression
-        self.lstm_layers = lstm_layers
-        self.output_size = output_size
+        self.vertical_convolutional_layers = vertical_convolutional_layers
+        self.vertical_kernel_size = vertical_kernel_size
+        self.smoothing = smoothing
         self.convolution_channels = convolution_channels
         self.inception_channels = inception_channels
-        self.smoothing_kernel_size = int(smoothing_percentage * lookback_period/inner_convolutional_layers) + 1
+        self.lstm_layers = lstm_layers
+        self.latent_size = latent_size
+        self.output_size = output_size
+        # The value of the smoothing can be computed with (if smoothing == True):
+        # vertical_kernel_size = int(smoothing_percentage * lookback_period/vertical_convolutional_layers) + 1
 
         # convolution blocks
+        if self.smoothing:
+            padding_value = (0, 0)
+        else: padding_value = 'same'
+
         modules_list = [
             nn.Conv2d(  in_channels=1, 
                         out_channels=self.convolution_channels, 
@@ -219,28 +228,32 @@ class LobCNN(nn.Module):
             nn.LeakyReLU(negative_slope=0.01),
             nn.BatchNorm2d(self.convolution_channels),
         ]
-        for _ in range(inner_convolutional_layers):
-            modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels, 
-                                            out_channels=self.convolution_channels, 
-                                            kernel_size=(self.smoothing_kernel_size, 1),
-                                            stride=(1, 1)))
+        for _ in range(self.vertical_convolutional_layers):
+            modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels,
+                                            out_channels=self.convolution_channels,
+                                            kernel_size=(self.vertical_kernel_size, 1),
+                                            stride=(1, 1),
+                                            padding=padding_value
+                                            ))
             modules_list.append(nn.LeakyReLU(negative_slope=0.01))
             modules_list.append(nn.BatchNorm2d(self.convolution_channels))
         self.conv1 = nn.Sequential(*modules_list)
         
         modules_list = [
-            nn.Conv2d(  in_channels=self.convolution_channels, 
-                        out_channels=self.convolution_channels, 
-                        kernel_size=(1, 2), 
+            nn.Conv2d(  in_channels=self.convolution_channels,
+                        out_channels=self.convolution_channels,
+                        kernel_size=(1, 2),
                         stride=(1, 2)),
             nn.LeakyReLU(negative_slope=0.01),
             nn.BatchNorm2d(self.convolution_channels),
         ]
-        for _ in range(inner_convolutional_layers):
-            modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels, 
-                                            out_channels=self.convolution_channels, 
-                                            kernel_size=(self.smoothing_kernel_size, 1),
-                                            stride=(1, 1)))
+        for _ in range(self.vertical_convolutional_layers):
+            modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels,
+                                            out_channels=self.convolution_channels,
+                                            kernel_size=(self.vertical_kernel_size, 1),
+                                            stride=(1, 1),
+                                            padding=padding_value
+                                            ))
             modules_list.append(nn.LeakyReLU(negative_slope=0.01))
             modules_list.append(nn.BatchNorm2d(self.convolution_channels))
         self.conv2 = nn.Sequential(*modules_list)
@@ -253,11 +266,13 @@ class LobCNN(nn.Module):
             nn.LeakyReLU(negative_slope=0.01),
             nn.BatchNorm2d(self.convolution_channels),
         ]
-        for _ in range(inner_convolutional_layers):
+        for _ in range(self.vertical_convolutional_layers):
             modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels, 
                                             out_channels=self.convolution_channels, 
-                                            kernel_size=(self.smoothing_kernel_size, 1), 
-                                            stride=(1, 1)))
+                                            kernel_size=(self.vertical_kernel_size, 1), 
+                                            stride=(1, 1),
+                                            padding=padding_value
+                                            ))
             modules_list.append(nn.LeakyReLU(negative_slope=0.01))
             modules_list.append(nn.BatchNorm2d(self.convolution_channels))
         self.conv3 = nn.Sequential(*modules_list)
@@ -298,18 +313,21 @@ class LobCNN(nn.Module):
             nn.BatchNorm2d(self.inception_channels),
         )
 
+        # RNN or LSTM layer(s)
+        self.dropout = nn.Dropout(0.2)
+        #self.encoder_gru = nn.GRU(input_size=self.inception_channels*4, hidden_size=self.inception_channels, num_layers=self.lstm_layers, batch_first=True)
+        self.encoder_lstm = nn.LSTM(input_size=self.inception_channels*4, hidden_size=self.latent_size, num_layers=self.lstm_layers, batch_first=True)
+        
         # Output FCNN
         self.fcnn_out = nn.Sequential(
             nn.Dropout(0.1),
-            nn.Linear(self.inception_channels, self.inception_channels),
+            nn.Linear(self.latent_size, self.latent_size),
             nn.LeakyReLU(),
-            nn.Linear(self.inception_channels, self.output_size)
+            nn.Linear(self.latent_size, self.output_size)
         )
 
-        # RNN or lstm layer(s)
-        self.dropout = nn.Dropout(0.1)
-        self.gru = nn.GRU(input_size=self.inception_channels*4, hidden_size=self.inception_channels, num_layers=self.lstm_layers, batch_first=True)
-        self.lstm = nn.LSTM(input_size=self.inception_channels*4, hidden_size=self.inception_channels, num_layers=self.lstm_layers, batch_first=True)
+        self.init_weights()
+
 
     def forward(self, x):
         x = self.conv1(x)
@@ -322,45 +340,26 @@ class LobCNN(nn.Module):
         x_inception_4 = self.inception_4(x)
 
         x = torch.cat((x_inception_1, x_inception_2, x_inception_3, x_inception_4), dim=1)
-        x = x.permute(0, 2, 1, 3).squeeze(3)
-        #x = torch.reshape(x, (-1, x.shape[1], x.shape[2]))
-        #x = self.dropout(x)
+        x = x.permute(0, 2, 1, 3)#.squeeze(3)
+        x = torch.reshape(x, (-1, x.shape[1], x.shape[2]))
+        x = self.dropout(x)
 
         h0 = torch.zeros(self.lstm_layers, x.size(0), self.inception_channels).to(self.device)
         c0 = torch.zeros(self.lstm_layers, x.size(0), self.inception_channels).to(self.device)
-        x, _ = self.lstm(x, (h0, c0))
+        x, _ = self.encoder_lstm(x, (h0, c0))
         x = x[:, -1, :]
 
-        x = self.fcnn_out(x).unsqueeze(1).unsqueeze(1)
-
+        x = self.fcnn_out(x)#.unsqueeze(1).unsqueeze(1)
         return x
-        
-        # fixed params sizes
-        #torch.Size([32, 1, 100, 40])
-        #torch.Size([32, 32, 94, 20])
-        #torch.Size([32, 32, 88, 10])
-        #torch.Size([32, 32, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 192, 82, 1])
-        #torch.Size([32, 82, 192])
-        #torch.Size([32, 64])
-        #torch.Size([32, 1])
 
-        ## variable params sizes
-        #torch.Size([32, 1, 100, 40])
-        #torch.Size([32, 32, 94, 20])
-        #torch.Size([32, 32, 88, 10])
-        #torch.Size([32, 32, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 256, 82, 1])
-        #torch.Size([32, 82, 256])
-        #torch.Size([32, 64])
-        #torch.Size([32, 1])
+    def init_weights(self):
+        for name, param in self.encoder_lstm.named_parameters():
+            if 'bias' in name:
+                 nn.init.constant_(param, 0.0)
+            elif 'weight_ih' in name:
+                 nn.init.kaiming_normal_(param)
+            elif 'weight_hh' in name:
+                 nn.init.orthogonal_(param)
 
 
 
@@ -408,6 +407,8 @@ class Astice(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_size, output_size)
         )
+
+        #self.init_weights()
         
     def forward(self, x):
         batch_size = x.size(0)
