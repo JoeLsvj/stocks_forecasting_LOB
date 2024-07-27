@@ -349,7 +349,7 @@ class LobCNN(nn.Module):
         x, _ = self.encoder_lstm(x, (h0, c0))
         x = x[:, -1, :]
 
-        x = self.fcnn_out(x)#.unsqueeze(1).unsqueeze(1)
+        x = self.fcnn_out(x).unsqueeze(1).unsqueeze(1)
         return x
 
     def init_weights(self):
