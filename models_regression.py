@@ -344,8 +344,8 @@ class LobCNN(nn.Module):
         x = torch.reshape(x, (-1, x.shape[1], x.shape[2]))
         x = self.dropout(x)
 
-        h0 = torch.zeros(self.lstm_layers, x.size(0), self.inception_channels).to(self.device)
-        c0 = torch.zeros(self.lstm_layers, x.size(0), self.inception_channels).to(self.device)
+        h0 = torch.zeros(self.lstm_layers, x.size(0), self.latent_size).to(self.device)
+        c0 = torch.zeros(self.lstm_layers, x.size(0), self.latent_size).to(self.device)
         x, _ = self.encoder_lstm(x, (h0, c0))
         x = x[:, -1, :]
 

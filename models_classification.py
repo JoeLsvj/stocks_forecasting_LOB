@@ -319,15 +319,3 @@ class Aragosta(nn.Module):
                  nn.init.kaiming_normal_(param)
             elif 'weight_hh' in name:
                  nn.init.orthogonal_(param)
-
-
-
-
-
-
-
-
-
-
-
-
