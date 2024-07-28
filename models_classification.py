@@ -12,9 +12,9 @@ class LSTM(nn.Module):
         self,
         input_size  : int = 1,
         output_size : int = 1,
-        hidden_size : int = 2,
-        num_layers  : int = 1,
-        dropout_rate: float = 0.1,
+        hidden_size : int = 64,
+        num_layers  : int = 2,
+        dropout_rate: float = 0.15,
     ):
         super(LSTM, self).__init__()
         self.input_size = input_size
@@ -95,10 +95,10 @@ class Astice(nn.Module):
         self,
         input_size  : int = 1,
         output_size : int = 1,
-        hidden_size : int = 2,
-        lstm_size : int = 2,
-        smooth_conv_channels : int = 1,
-        dropout_rate : float = 0.2
+        hidden_size : int = 64,
+        lstm_size : int = 64,
+        smooth_conv_channels : int = 8,
+        dropout_rate : float = 0.15
     ):
         super(Astice, self).__init__()
         # Save model hyperparameters
@@ -196,7 +196,7 @@ class Marmotta(nn.Module):
             # LSTM layers
             lstm_layers = 2,
             # FCNN
-            dropout_rate = 0.1,
+            dropout_rate = 0.15,
             device = torch.device('cpu')
     ):
         super(Marmotta, self).__init__()
