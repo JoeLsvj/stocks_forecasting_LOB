@@ -18,6 +18,9 @@ from torch.utils.data import DataLoader, random_split
 import time
 
 # Import modules 
+import models_regression as Models
+import utils
+import dataset as Dataset
 
 
 # -------- Structures --------
@@ -99,34 +102,37 @@ def fitness_evaluation(
         #dropout,
         device): 
 
-    # Model parameters
-    #model_params = {
-    #    'input_size': input_size,
-    #    'output_size': output_size,
-    #    'hidden_size': individual.structure_solution[0], # must be solution
-    #    'num_layers': 2,
-    #    'dropout': individual.dropout_solution}
+    # Create the model
+    params = {
+        'input_size': input_size,
+        'hidden_layer_size': individual.structure_solution[0],
+        'num_layers': 2,
+        'output_size': output_size,
+        'dropout': individual.dropout_solution,
+    }
+    model = Models.LSTM1(**params).to(device)
 
-    # Define the model
-    #model = utils.ModelTools.build_model(
-    #    Models.CustomLSTM, model_params).to(device)
-
-    # Define the optimizer and the loss function
-    ##optimizer = torch.optim.Adam(model.parameters(), lr=individual.lr_solution)
-    ##criterion = torch.nn.CrossEntropyLoss()
+    # Define loss function and optimizer
+    learning_rate = individual.lr_solution
+    epochs = num_epochs_per_evaluation
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     # Train the model
-    #train_res = utils.custom_train(
-    #    train_loader = training_data,
-    #    val_loader = validation_data,
-    #    model = model,
-    #    optimizer = optimizer,
-    #    criterion = criterion,
-    #    device = device,
-    #    n_epochs = num_epochs_per_evaluation)
+    training_info = utils.ModelTools.train(
+        model_id = model.name,
+        model = model,
+        criterion = criterion,
+        optimizer = optimizer,
+        train_loader = training_data,
+        val_loader = validation_data,
+        n_epochs = epochs,
+        save = False,
+        device = model.device
+    )
 
     # Return the average of the last 5 validation losses
-    return np.mean(train_res['losses_val'][-5:]) # return the average of the last 5 losses
+    return np.mean(training_info['val_loss'][-5:]) # return the average of the last 5 losses
 
 
 

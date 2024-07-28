@@ -18,7 +18,9 @@ from torch.utils.data import DataLoader, random_split
 import time
 
 # Import modules 
-
+import models_regression as Models
+import utils
+import dataset as Dataset
 
 # -------- Structures --------
 class Individual:
