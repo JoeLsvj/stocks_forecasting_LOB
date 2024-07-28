@@ -281,6 +281,8 @@ class Marmotta(nn.Module):
         # hidden representation
         h = h.reshape(batch_size, -1)
         _h = self.fcnn_4(h)
+        
+        
         # Context vector
         hn = hn.permute(1, 0, 2).reshape(batch_size, -1)
         c = self.fcnn_3(hn)
@@ -289,6 +291,7 @@ class Marmotta(nn.Module):
         y = []
         prev = torch.zeros(batch_size, self.hidden_size).to(self.device)
         for i in range(self.seq_len_out):
+            
             v = torch.cat([_h, c, prev], dim=1)
             v = self.fcnn_5(v)
             prev = v
