@@ -187,30 +187,39 @@ class LSTMWithAttention(nn.Module):
             elif 'weight_hh' in name:
                  nn.init.orthogonal_(param)
 
+
 class LobCNN(nn.Module):
     def __init__(   self,
-                    lookback_period = 100,
-                    inner_convolutional_layers = 2,
-                    smoothing_percentage = 0.06,
+                    vertical_convolutional_layers = 2,
+                    vertical_kernel_size = 4,
+                    smoothing:bool = False,
                     convolution_channels = 32,
                     inception_channels = 64,
                     lstm_layers = 2,
+                    latent_size = 64,
                     output_size = 1,
-                    regression = True,
                 ):
         super(LobCNN, self).__init__()
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.name = 'LobCNN'
 
-        self.regression = regression
-        self.lstm_layers = lstm_layers
-        self.output_size = output_size
+        self.vertical_convolutional_layers = vertical_convolutional_layers
+        self.vertical_kernel_size = vertical_kernel_size
+        self.smoothing = smoothing
         self.convolution_channels = convolution_channels
         self.inception_channels = inception_channels
-        self.smoothing_kernel_size = int(smoothing_percentage * lookback_period/inner_convolutional_layers) + 1
+        self.lstm_layers = lstm_layers
+        self.latent_size = latent_size
+        self.output_size = output_size
+        # The value of the smoothing can be computed with (if smoothing == True):
+        # vertical_kernel_size = int(smoothing_percentage * lookback_period/vertical_convolutional_layers) + 1
 
         # convolution blocks
+        if self.smoothing:
+            padding_value = (0, 0)
+        else: padding_value = 'same'
+
         modules_list = [
             nn.Conv2d(  in_channels=1, 
                         out_channels=self.convolution_channels, 
@@ -219,28 +228,32 @@ class LobCNN(nn.Module):
             nn.LeakyReLU(negative_slope=0.01),
             nn.BatchNorm2d(self.convolution_channels),
         ]
-        for _ in range(inner_convolutional_layers):
-            modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels, 
-                                            out_channels=self.convolution_channels, 
-                                            kernel_size=(self.smoothing_kernel_size, 1),
-                                            stride=(1, 1)))
+        for _ in range(self.vertical_convolutional_layers):
+            modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels,
+                                            out_channels=self.convolution_channels,
+                                            kernel_size=(self.vertical_kernel_size, 1),
+                                            stride=(1, 1),
+                                            padding=padding_value
+                                            ))
             modules_list.append(nn.LeakyReLU(negative_slope=0.01))
             modules_list.append(nn.BatchNorm2d(self.convolution_channels))
         self.conv1 = nn.Sequential(*modules_list)
         
         modules_list = [
-            nn.Conv2d(  in_channels=self.convolution_channels, 
-                        out_channels=self.convolution_channels, 
-                        kernel_size=(1, 2), 
+            nn.Conv2d(  in_channels=self.convolution_channels,
+                        out_channels=self.convolution_channels,
+                        kernel_size=(1, 2),
                         stride=(1, 2)),
             nn.LeakyReLU(negative_slope=0.01),
             nn.BatchNorm2d(self.convolution_channels),
         ]
-        for _ in range(inner_convolutional_layers):
-            modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels, 
-                                            out_channels=self.convolution_channels, 
-                                            kernel_size=(self.smoothing_kernel_size, 1),
-                                            stride=(1, 1)))
+        for _ in range(self.vertical_convolutional_layers):
+            modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels,
+                                            out_channels=self.convolution_channels,
+                                            kernel_size=(self.vertical_kernel_size, 1),
+                                            stride=(1, 1),
+                                            padding=padding_value
+                                            ))
             modules_list.append(nn.LeakyReLU(negative_slope=0.01))
             modules_list.append(nn.BatchNorm2d(self.convolution_channels))
         self.conv2 = nn.Sequential(*modules_list)
@@ -253,11 +266,13 @@ class LobCNN(nn.Module):
             nn.LeakyReLU(negative_slope=0.01),
             nn.BatchNorm2d(self.convolution_channels),
         ]
-        for _ in range(inner_convolutional_layers):
+        for _ in range(self.vertical_convolutional_layers):
             modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels, 
                                             out_channels=self.convolution_channels, 
-                                            kernel_size=(self.smoothing_kernel_size, 1), 
-                                            stride=(1, 1)))
+                                            kernel_size=(self.vertical_kernel_size, 1), 
+                                            stride=(1, 1),
+                                            padding=padding_value
+                                            ))
             modules_list.append(nn.LeakyReLU(negative_slope=0.01))
             modules_list.append(nn.BatchNorm2d(self.convolution_channels))
         self.conv3 = nn.Sequential(*modules_list)
@@ -298,18 +313,21 @@ class LobCNN(nn.Module):
             nn.BatchNorm2d(self.inception_channels),
         )
 
+        # RNN or LSTM layer(s)
+        self.dropout = nn.Dropout(0.2)
+        #self.encoder_gru = nn.GRU(input_size=self.inception_channels*4, hidden_size=self.inception_channels, num_layers=self.lstm_layers, batch_first=True)
+        self.encoder_lstm = nn.LSTM(input_size=self.inception_channels*4, hidden_size=self.latent_size, num_layers=self.lstm_layers, batch_first=True)
+        
         # Output FCNN
         self.fcnn_out = nn.Sequential(
             nn.Dropout(0.1),
-            nn.Linear(self.inception_channels, self.inception_channels),
+            nn.Linear(self.latent_size, self.latent_size),
             nn.LeakyReLU(),
-            nn.Linear(self.inception_channels, self.output_size)
+            nn.Linear(self.latent_size, self.output_size)
         )
 
-        # RNN or lstm layer(s)
-        self.dropout = nn.Dropout(0.1)
-        self.gru = nn.GRU(input_size=self.inception_channels*4, hidden_size=self.inception_channels, num_layers=self.lstm_layers, batch_first=True)
-        self.lstm = nn.LSTM(input_size=self.inception_channels*4, hidden_size=self.inception_channels, num_layers=self.lstm_layers, batch_first=True)
+        self.init_weights()
+
 
     def forward(self, x):
         x = self.conv1(x)
@@ -322,45 +340,26 @@ class LobCNN(nn.Module):
         x_inception_4 = self.inception_4(x)
 
         x = torch.cat((x_inception_1, x_inception_2, x_inception_3, x_inception_4), dim=1)
-        x = x.permute(0, 2, 1, 3).squeeze(3)
-        #x = torch.reshape(x, (-1, x.shape[1], x.shape[2]))
-        #x = self.dropout(x)
+        x = x.permute(0, 2, 1, 3)#.squeeze(3)
+        x = torch.reshape(x, (-1, x.shape[1], x.shape[2]))
+        x = self.dropout(x)
 
-        h0 = torch.zeros(self.lstm_layers, x.size(0), self.inception_channels).to(self.device)
-        c0 = torch.zeros(self.lstm_layers, x.size(0), self.inception_channels).to(self.device)
-        x, _ = self.lstm(x, (h0, c0))
+        h0 = torch.zeros(self.lstm_layers, x.size(0), self.latent_size).to(self.device)
+        c0 = torch.zeros(self.lstm_layers, x.size(0), self.latent_size).to(self.device)
+        x, _ = self.encoder_lstm(x, (h0, c0))
         x = x[:, -1, :]
 
         x = self.fcnn_out(x).unsqueeze(1).unsqueeze(1)
-
         return x
-        
-        # fixed params sizes
-        #torch.Size([32, 1, 100, 40])
-        #torch.Size([32, 32, 94, 20])
-        #torch.Size([32, 32, 88, 10])
-        #torch.Size([32, 32, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 192, 82, 1])
-        #torch.Size([32, 82, 192])
-        #torch.Size([32, 64])
-        #torch.Size([32, 1])
 
-        ## variable params sizes
-        #torch.Size([32, 1, 100, 40])
-        #torch.Size([32, 32, 94, 20])
-        #torch.Size([32, 32, 88, 10])
-        #torch.Size([32, 32, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 64, 82, 1])
-        #torch.Size([32, 256, 82, 1])
-        #torch.Size([32, 82, 256])
-        #torch.Size([32, 64])
-        #torch.Size([32, 1])
+    def init_weights(self):
+        for name, param in self.encoder_lstm.named_parameters():
+            if 'bias' in name:
+                 nn.init.constant_(param, 0.0)
+            elif 'weight_ih' in name:
+                 nn.init.kaiming_normal_(param)
+            elif 'weight_hh' in name:
+                 nn.init.orthogonal_(param)
 
 
 
@@ -408,6 +407,8 @@ class Astice(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_size, output_size)
         )
+
+        self.init_weights()
         
     def forward(self, x):
         batch_size = x.size(0)
@@ -443,3 +444,379 @@ class Astice(nn.Module):
                  nn.init.kaiming_normal_(param)
             elif 'weight_hh' in name:
                  nn.init.orthogonal_(param)
+
+
+
+# with decoders.
+class LobCNN_encoderdecoder(nn.Module):
+    def __init__(   self,
+                    vertical_convolutional_layers = 2,
+                    vertical_kernel_size = 2,
+                    smoothing:bool = False,
+                    convolution_channels = 32,
+                    inception_channels = 64,
+                    lstm_layers = 2,
+                    latent_size = 64,
+                    output_size = 1,
+                ):
+        super(LobCNN_encoderdecoder, self).__init__()
+
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.name = 'LobCNN_encoderdecoder'
+
+        self.vertical_convolutional_layers = vertical_convolutional_layers
+        self.vertical_kernel_size = vertical_kernel_size
+        self.smoothing = smoothing
+        self.convolution_channels = convolution_channels
+        self.inception_channels = inception_channels
+        self.lstm_layers = lstm_layers
+        self.latent_size = latent_size
+        self.output_size = output_size
+        # The value of the smoothing can be computed with (if smoothing == True):
+        # vertical_kernel_size = int(smoothing_percentage * lookback_period/vertical_convolutional_layers) + 1
+
+        # convolution blocks
+        if self.smoothing:
+            padding_value = (0, 0)
+        else: padding_value = 'same'
+
+        modules_list = [
+            nn.Conv2d(  in_channels=1, 
+                        out_channels=self.convolution_channels, 
+                        kernel_size=(1, 2), 
+                        stride=(1, 2)),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(self.convolution_channels),
+        ]
+        for _ in range(self.vertical_convolutional_layers):
+            modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels,
+                                            out_channels=self.convolution_channels,
+                                            kernel_size=(self.vertical_kernel_size, 1),
+                                            stride=(1, 1),
+                                            padding=padding_value
+                                            ))
+            modules_list.append(nn.LeakyReLU(negative_slope=0.01))
+            modules_list.append(nn.BatchNorm2d(self.convolution_channels))
+        self.conv1 = nn.Sequential(*modules_list)
+        
+        modules_list = [
+            nn.Conv2d(  in_channels=self.convolution_channels,
+                        out_channels=self.convolution_channels,
+                        kernel_size=(1, 2),
+                        stride=(1, 2)),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(self.convolution_channels),
+        ]
+        for _ in range(self.vertical_convolutional_layers):
+            modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels,
+                                            out_channels=self.convolution_channels,
+                                            kernel_size=(self.vertical_kernel_size, 1),
+                                            stride=(1, 1),
+                                            padding=padding_value
+                                            ))
+            modules_list.append(nn.LeakyReLU(negative_slope=0.01))
+            modules_list.append(nn.BatchNorm2d(self.convolution_channels))
+        self.conv2 = nn.Sequential(*modules_list)
+
+        modules_list = [
+            nn.Conv2d(  in_channels=self.convolution_channels, 
+                        out_channels=self.convolution_channels, 
+                        kernel_size=(1, 10), 
+                        stride=(1, 1)),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(self.convolution_channels),
+        ]
+        for _ in range(self.vertical_convolutional_layers):
+            modules_list.append(nn.Conv2d(  in_channels=self.convolution_channels, 
+                                            out_channels=self.convolution_channels, 
+                                            kernel_size=(self.vertical_kernel_size, 1), 
+                                            stride=(1, 1),
+                                            padding=padding_value
+                                            ))
+            modules_list.append(nn.LeakyReLU(negative_slope=0.01))
+            modules_list.append(nn.BatchNorm2d(self.convolution_channels))
+        self.conv3 = nn.Sequential(*modules_list)
+
+        # Inception modules: smoothing the time series with different scales.
+        # A large kernel size is used to capture a global distribution of the image 
+        # while a small kernel size is used to capture more local information.
+        # Inception network architecture makes it possible to use filters of multiple 
+        # sizes without increasing the depth of the network. The different filters 
+        # are added parallelly instead of being fully connected one after the other.
+        # The following scheme is the same as the one of the original paper of 
+        # googleLeNet: https://www.cs.unc.edu/~wliu/papers/GoogLeNet.pdf .
+        self.inception_1 = nn.Sequential(
+            nn.Conv2d(in_channels=self.convolution_channels, out_channels=self.inception_channels, kernel_size=(1, 1), padding='same'),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(self.inception_channels),
+            nn.Conv2d(in_channels=self.inception_channels, out_channels=self.inception_channels, kernel_size=(3, 1), padding='same'),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(self.inception_channels),
+        )
+        self.inception_2 = nn.Sequential(
+            nn.Conv2d(in_channels=self.convolution_channels, out_channels=self.inception_channels, kernel_size=(1, 1), padding='same'),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(self.inception_channels),
+            nn.Conv2d(in_channels=self.inception_channels, out_channels=self.inception_channels, kernel_size=(5, 1), padding='same'),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(self.inception_channels),
+        )
+        self.inception_3 = nn.Sequential(
+            nn.MaxPool2d((3, 1), stride=(1, 1), padding=(1, 0)),
+            nn.Conv2d(in_channels=self.convolution_channels, out_channels=self.inception_channels, kernel_size=(1, 1), padding='same'),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(self.inception_channels),
+        )
+        self.inception_4 = nn.Sequential(
+            nn.Conv2d(in_channels=self.convolution_channels, out_channels=self.inception_channels, kernel_size=(1, 1), padding='same'),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(self.inception_channels),
+        )
+
+        # RNN or LSTM layer(s)
+        self.dropout = nn.Dropout(0.2)
+        #self.encoder_gru = nn.GRU(input_size=self.inception_channels*4, hidden_size=self.latent_size, num_layers=self.lstm_layers, batch_first=True)
+        self.encoder_lstm = nn.LSTM(input_size=self.inception_channels*4, hidden_size=self.latent_size, num_layers=self.lstm_layers, batch_first=True)
+
+        self.decoder_lstm = nn.LSTM(input_size=self.latent_size, hidden_size=self.latent_size, num_layers=self.lstm_layers, batch_first=True)
+        #self.fcnn = nn.Linear(self.latent_size * 2, 3) # classification
+        self.fcnn = nn.Linear(self.latent_size * 2, self.output_size) # regression
+        self.softmax = nn.Softmax(dim=-1)
+        self.batch_norm = nn.BatchNorm1d(self.latent_size)
+
+        self.init_weights()
+
+    
+    def convolution(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+
+        x_inception_1 = self.inception_1(x)
+        x_inception_2 = self.inception_2(x)
+        x_inception_3 = self.inception_3(x)
+        x_inception_4 = self.inception_4(x)
+
+        x = torch.cat((x_inception_1, x_inception_2, x_inception_3, x_inception_4), dim=1)
+
+        x = x.permute(0, 2, 1, 3)
+        x = torch.reshape(x, (-1, x.shape[1], x.shape[2]))
+        x = self.dropout(x)
+        return x
+
+    def encoder(self, x):
+        h0 = torch.zeros(self.lstm_layers, x.size(0), self.latent_size).to(self.device)
+        c0 = torch.zeros(self.lstm_layers, x.size(0), self.latent_size).to(self.device)
+        encoder_output, (hn, cn) = self.encoder_lstm(x, (h0, c0))
+        return encoder_output, (hn, cn)
+    
+    def decoder(self, decoder_input, encoder_output, states):
+        # Decoder with attention
+        all_outputs = []
+        all_attention = []
+        # Initial inputs and state for the decoder [32, 1, 1 or 2] or [32, 1, 128], state_h: [2, 32, 128]
+        #decoder_input = torch.cat((decoder_input, state_h.permute(1,0,2)), dim=1)
+        for _ in range(self.output_size):
+
+            outputs, states = self.decoder_lstm(decoder_input, states)
+            attention = torch.bmm(outputs, encoder_output.permute(0, 2, 1))
+            attention = self.softmax(attention)
+            context = torch.bmm(attention, encoder_output)
+            context = self.batch_norm(context.permute(0, 2, 1)).permute(0, 2, 1)
+            decoder_combined_context = torch.cat([context, outputs], dim=-1)
+            outputs = self.fcnn(decoder_combined_context)
+            all_outputs.append(outputs)
+            all_attention.append(attention)
+            decoder_input = torch.cat([outputs, context[:,:,:-1]], dim=-1)
+
+        decoder_outputs = torch.cat(all_outputs, dim=1).squeeze(2)
+        decoder_attention = torch.cat(all_attention, dim=1)
+        return decoder_outputs, decoder_attention
+
+
+    def forward(self, x):
+        decoder_input = torch.zeros(x.shape[0], 1, self.latent_size).to(self.device)
+        #decoder_input = torch.zeros(x.shape[0], 1, 1).to(self.device)
+
+        x = self.convolution(x)
+        encoder_output, states = self.encoder(x)
+        decoder_outputs, _ = self.decoder(decoder_input, encoder_output, states)
+        return decoder_outputs
+
+
+    def init_weights(self):
+        for name, param in self.encoder_lstm.named_parameters():
+            if 'bias' in name:
+                 nn.init.constant_(param, 0.0)
+            elif 'weight_ih' in name:
+                 nn.init.kaiming_normal_(param)
+            elif 'weight_hh' in name:
+                 nn.init.orthogonal_(param)
+        for name, param in self.decoder_lstm.named_parameters():
+            if 'bias' in name:
+                 nn.init.constant_(param, 0.0)
+            elif 'weight_ih' in name:
+                 nn.init.kaiming_normal_(param)
+            elif 'weight_hh' in name:
+                 nn.init.orthogonal_(param)
+
+
+class LobCNN_encoderdecoder_light(nn.Module):
+    def __init__(self, latent_size, output_size):
+        super(LobCNN_encoderdecoder_light, self).__init__()
+
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.name = 'LobCNN_encoderdecoder_light'
+
+        self.latent_size = latent_size
+        self.output_size = output_size
+        
+        # Convolution layers
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=(1, 2), stride=(1, 2))
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=(4, 1), padding='same')
+        self.conv3 = nn.Conv2d(32, 32, kernel_size=(4, 1), padding='same')
+        
+        self.conv4 = nn.Conv2d(32, 32, kernel_size=(1, 2), stride=(1, 2))
+        self.conv5 = nn.Conv2d(32, 32, kernel_size=(4, 1), padding='same')
+        self.conv6 = nn.Conv2d(32, 32, kernel_size=(4, 1), padding='same')
+        
+        self.conv7 = nn.Conv2d(32, 32, kernel_size=(1, 10), stride=(1, 2))
+        self.conv8 = nn.Conv2d(32, 32, kernel_size=(4, 1), padding='same')
+        self.conv9 = nn.Conv2d(32, 32, kernel_size=(4, 1), padding='same')
+        
+        # Inception module
+        self.conv10 = nn.Conv2d(32, 64, kernel_size=(1, 1), padding='same')
+        self.conv11 = nn.Conv2d(64, 64, kernel_size=(3, 1), padding='same')
+        
+        self.conv12 = nn.Conv2d(32, 64, kernel_size=(1, 1), padding='same')
+        self.conv13 = nn.Conv2d(64, 64, kernel_size=(5, 1), padding='same')
+        
+        self.conv14 = nn.Conv2d(32, 64, kernel_size=(1, 1), padding='same')
+        self.pool = nn.MaxPool2d(kernel_size=(3, 1), stride=(1, 1), padding=(1,0))
+        
+        # LSTM layers
+        self.encoder_lstm = nn.LSTM(64*3, latent_size, num_layers=2, batch_first=True)
+        self.decoder_lstm = nn.LSTM(1, latent_size, num_layers=2, batch_first=True)
+        
+        #self.dense = nn.Linear(latent_size * 2, 3) # classification
+        self.dense = nn.Linear(latent_size * 2, output_size) # regression
+        self.softmax = nn.Softmax(dim=-1)
+        self.batch_norm = nn.BatchNorm1d(latent_size)
+
+        self.init_weights()
+
+
+    def convolution(self, x):
+        x = F.leaky_relu(self.conv1(x), negative_slope=0.01)
+        x = F.leaky_relu(self.conv2(x), negative_slope=0.01)
+        x = F.leaky_relu(self.conv3(x), negative_slope=0.01)
+        
+        x = F.leaky_relu(self.conv4(x), negative_slope=0.01)
+        x = F.leaky_relu(self.conv5(x), negative_slope=0.01)
+        x = F.leaky_relu(self.conv6(x), negative_slope=0.01)
+        
+        x = F.leaky_relu(self.conv7(x), negative_slope=0.01)
+        x = F.leaky_relu(self.conv8(x), negative_slope=0.01)
+        x = F.leaky_relu(self.conv9(x), negative_slope=0.01)
+
+        # Inception module
+        inception_1 = F.leaky_relu(self.conv10(x), negative_slope=0.01)
+        inception_1 = F.leaky_relu(self.conv11(inception_1), negative_slope=0.01)
+        
+        inception_2 = F.leaky_relu(self.conv12(x), negative_slope=0.01)
+        inception_2 = F.leaky_relu(self.conv13(inception_2), negative_slope=0.01)
+        
+        inception_3 = self.pool(x)
+        inception_3 = F.leaky_relu(self.conv14(inception_3), negative_slope=0.01)
+        
+        convolution_output = torch.cat([inception_1, inception_2, inception_3], dim=1)
+        convolution_output = convolution_output.permute(0, 2, 1, 3).reshape(convolution_output.size(0), -1, convolution_output.size(1))
+        return convolution_output
+
+    def encoder(self, convolution_output):
+        # Encoder LSTM
+        encoder_output, (state_h, state_c) = self.encoder_lstm(convolution_output)
+        return encoder_output, (state_h, state_c)
+
+    def decoder(self, decoder_input, encoder_output, states):
+        # Decoder with attention
+        all_outputs = []
+        all_attention = []
+
+        # Initial inputs and state for the decoder [32, 1, 1] or [32, 1, 128], state_h: [2, 32, 128]
+        #decoder_input = torch.cat((decoder_input, state_h.permute(1,0,2)), dim=1)
+        for _ in range(self.output_size):
+
+            outputs, states = self.decoder_lstm(decoder_input, states)
+            attention = torch.bmm(outputs, encoder_output.permute(0, 2, 1))
+            attention = self.softmax(attention)
+            context = torch.bmm(attention, encoder_output)
+            context = self.batch_norm(context.permute(0, 2, 1)).permute(0, 2, 1)
+            decoder_combined_context = torch.cat([context, outputs], dim=-1)
+            outputs = self.dense(decoder_combined_context)
+            all_outputs.append(outputs)
+            all_attention.append(attention)
+            decoder_input = torch.cat([outputs, context[:,:,1:]], dim=-1)
+
+        decoder_outputs = torch.cat(all_outputs, dim=1).squeeze(2)
+        decoder_attention = torch.cat(all_attention, dim=1)
+        return decoder_outputs, decoder_attention
+
+
+    def forward(self, x):
+        #decoder_input = torch.zeros(x.shape[0], 1, self.latent_size).to(self.device)
+        decoder_input = torch.zeros(x.shape[0], 1, 1).to(self.device)
+
+        convolution_output = self.convolution(x)
+        encoder_output, states = self.encoder(convolution_output)
+        decoder_outputs, _ = self.decoder(decoder_input, encoder_output, states)
+        return decoder_outputs
+
+
+    def init_weights(self):
+        for name, param in self.encoder_lstm.named_parameters():
+            if 'bias' in name:
+                 nn.init.constant_(param, 0.0)
+            elif 'weight_ih' in name:
+                 nn.init.kaiming_normal_(param)
+            elif 'weight_hh' in name:
+                 nn.init.orthogonal_(param)
+        for name, param in self.decoder_lstm.named_parameters():
+            if 'bias' in name:
+                 nn.init.constant_(param, 0.0)
+            elif 'weight_ih' in name:
+                 nn.init.kaiming_normal_(param)
+            elif 'weight_hh' in name:
+                 nn.init.orthogonal_(param)
+
+
+## old functions with teacher forcing
+'''
+def prepare_decoder_input_regression(self, data:torch.Tensor, teacher_forcing:bool=False, depth:int=1):
+        # Assuming `data` is a PyTorch tensor of shape (batch_size, sequence_length, num_features)
+        batch_size, channels, sequence_length, num_features = data.shape
+        if teacher_forcing:
+            # Initialize the first decoder input with zeros or another chosen value
+            first_decoder_input = torch.zeros(batch_size, depth, num_features).to(self.device)
+            # Concatenate the data (excluding the last time step) with the first decoder input
+            decoder_input_data = torch.cat((first_decoder_input, data[:, :-depth, :]), dim=1)
+        else:
+            # Initialize the decoder input data with zeros (or another appropriate value)
+            decoder_input_data = torch.zeros(batch_size, depth, self.latent_size).to(self.device)
+        return decoder_input_data
+
+    def prepare_decoder_input_classification(self, data:torch.Tensor, teacher_forcing:bool=False):
+        # Assuming `data` is a PyTorch tensor of shape (batch_size, sequence_length, num_features)
+        batch_size, sequence_length, num_features = data.shape
+        if teacher_forcing:
+            # Create the first decoder input tensor with a categorical representation (one-hot encoding)
+            first_decoder_input = F.one_hot(torch.zeros(batch_size, dtype=torch.long), num_classes=3).float()
+            first_decoder_input = first_decoder_input.unsqueeze(1)  # Shape: (batch_size, 1, 3)
+            # Concatenate the data (excluding the last time step) with the first decoder input
+            decoder_input_data = torch.cat((data[:, :-1, :], first_decoder_input), dim=1)
+        else:
+            # Initialize the decoder input data with zeros and set the first category to 1
+            decoder_input_data = torch.zeros(batch_size, 1, 3)
+            decoder_input_data[:, 0, 0] = 1.
+        return decoder_input_data
+'''

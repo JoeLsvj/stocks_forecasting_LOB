@@ -1,7 +1,7 @@
 
 # -------- Libs --------
 
-# For es
+# Libs for th es
 import torch # the main pytorch library
 from torch import nn # the sub-library containing neural networks
 from torch.utils.data import DataLoader, Subset # an object that generates batches of data for training/testing
@@ -12,23 +12,12 @@ import pandas as pd
 import numpy as np # NumPy, the python array library
 import random # for generating random numbers
 import matplotlib.pyplot as plt
+import csv
 
 from torch.utils.data import DataLoader, random_split
 import time
 
-# For utils
-from tqdm.notebook import tqdm
-import time as time
-import sys # to stop the execution of the code
-from IPython.display import display, Javascript # to save 
-import pygame # to sound
-import csv
-
-
-# software modules
-import models_regression as Models
-import utils
-import dataset as Dataset
+# Import modules 
 
 
 # -------- Structures --------
@@ -110,31 +99,34 @@ def fitness_evaluation(
         #dropout,
         device): 
 
-    params = {
-        'input_size': input_size,
-        'hidden_layer_size': individual.structure_solution[0],
-        'num_layers': 2,
-        'output_size': output_size,
-        'dropout': individual.dropout_solution,
-    }
-    model = Models.LSTM1(**params).to(device)
+    # Model parameters
+    #model_params = {
+    #    'input_size': input_size,
+    #    'output_size': output_size,
+    #    'hidden_size': individual.structure_solution[0], # must be solution
+    #    'num_layers': 2,
+    #    'dropout': individual.dropout_solution}
 
-    # Optimizer parameters
-    optimizer = torch.optim.Adam(model.parameters(), lr=individual.lr_solution)
-    criterion = nn.MSELoss()
+    # Define the model
+    #model = utils.ModelTools.build_model(
+    #    Models.CustomLSTM, model_params).to(device)
 
-    training_info = utils.ModelTools.train(
-        model_id = 'LSTM1',
-        model = model,
-        criterion = criterion,
-        optimizer = optimizer,
-        train_loader = training_data,
-        val_loader = validation_data,
-        n_epochs = num_epochs_per_evaluation,
-        save = False,
-        device = device)
+    # Define the optimizer and the loss function
+    ##optimizer = torch.optim.Adam(model.parameters(), lr=individual.lr_solution)
+    ##criterion = torch.nn.CrossEntropyLoss()
 
-    return np.mean(training_info['val_loss'][-5:])
+    # Train the model
+    #train_res = utils.custom_train(
+    #    train_loader = training_data,
+    #    val_loader = validation_data,
+    #    model = model,
+    #    optimizer = optimizer,
+    #    criterion = criterion,
+    #    device = device,
+    #    n_epochs = num_epochs_per_evaluation)
+
+    # Return the average of the last 5 validation losses
+    return np.mean(train_res['losses_val'][-5:]) # return the average of the last 5 losses
 
 
 
@@ -711,6 +703,8 @@ def es_lambdaMu_sld_regression(
             [str(ind) for ind in sorted(population, key=lambda ind: ind.fitness)]
         ])
 
+        print(f"Generation {gen_index}: {fitness_evaluations} fitness evaluations, best individual: {best_individual}")
+
         # Evolution loop
         while fitness_evaluations < max_fitness_evaluations:
 
@@ -758,6 +752,7 @@ def es_lambdaMu_sld_regression(
                 gen_index + 1, fitness_evaluations, time.time() - time_start, best_individual, 
                 [str(ind) for ind in population]
             ])
+            print(f"Generation {gen_index + 1}: {fitness_evaluations} fitness evaluations, best individual: {best_individual}")
             gen_index += 1
 
         # Compute the best individual ever
@@ -765,6 +760,7 @@ def es_lambdaMu_sld_regression(
         writer.writerow([
                 "Best individual ever: ", None , None, best_individual_ever
             ])
+        print(f"Best individual ever: {best_individual_ever}")
 
     return best_individual_ever
 
