@@ -1,321 +1,33 @@
-import pandas as pd
-import numpy as np
+import os
+import sys
+import time
+import pickle
 import torch
-import tabulate
-import tqdm.notebook as tqdm
-import Dataset
+import numpy as np
+import pandas as pd
+from tqdm.auto import tqdm
+from sklearn.metrics import r2_score, roc_auc_score
+import dataset as Dataset
+import torch.nn as nn
 
 
-class FeaturesExtractionLOB:
-    
-    def __init__(self, data : pd.DataFrame):
-        self.data = data
-    
-    def extract(self):
-        # Mid price
-        self.data['MP'] = (self.data['P_Ask_1'] + self.data['P_Bid_1']) / 2
-        # Wheigted mid price
-        self.data['WMP'] = (self.data['P_Ask_1'] * self.data['V_Ask_1'] + self.data['P_Bid_1'] * self.data['V_Bid_1']) / (self.data['V_Ask_1'] + self.data['V_Bid_1'])
-        # Bid-Aks spread
-        self.data['Spread'] = self.data['P_Ask_1'] - self.data['P_Bid_1']
-        # Order Book Imbalance
-        self.data['Imbalance'] = (self.data['V_Ask_1'] - self.data['V_Bid_1']) / (self.data['V_Ask_1'] + self.data['V_Bid_1'])
-        # Bid, Ask and Total Volume
-        self.data['Depth_Bid'] = self.data.filter(regex='V_Bid').sum(axis=1)
-        self.data['Depth_Ask'] = self.data.filter(regex='V_Ask').sum(axis=1)
-        self.data['Depth_Total'] = self.data['Depth_Bid'] + self.data['Depth_Ask']
-        
-        return self.data
-
-
-def train(
-    train_loader : torch.utils.data.DataLoader,
-    val_loader   : torch.utils.data.DataLoader,
-    model        : torch.nn.Module,
-    optimizer    : torch.optim.Optimizer,
-    criterion,
-    device       : torch.device,
-    n_epochs     : int,
-):
-    progress_bar = tqdm.tqdm(range(n_epochs), desc='Training')
-    losses_train = []
-    losses_val = []
-    
-    for epoch in progress_bar:
-        model.train()
-        for X, y in train_loader:
-            # Move the data to the device
-            X, y = X.to(device), y.to(device)
-            
-            # Reset the gradients
-            optimizer.zero_grad()
-            
-            # Compute the prediction
-            y_pred = model(X)
-            
-            # Compute the loss
-            loss = criterion(y_pred, y)
-            
-            # Update the model
-            loss.backward()
-            optimizer.step()
-        
-        # Evaluate the model on the validation set
-        model.eval()
-        with torch.no_grad():
-            loss_train = 0
-            n_elements = 0
-            for X, y in train_loader:
-                # Move the data to the device
-                X, y = X.to(device), y.to(device)
-                
-                # Compute the prediction
-                y_pred = model(X)
-                
-                # Compute the loss
-                loss = criterion(y_pred, y)
-                
-                # Update the loss
-                loss_train += loss.item()
-                n_elements += 1
-            loss_train /= n_elements
-            losses_train.append(loss_train)
-            
-            loss_val = 0
-            n_elements = 0
-            for X, y in val_loader:
-                # Move the data to the device
-                X, y = X.to(device), y.to(device)
-                
-                # Compute the prediction
-                y_pred = model(X)
-                
-                # Compute the loss
-                loss = criterion(y_pred, y)
-                loss_val += loss.item()
-                n_elements += 1
-            loss_val /= n_elements
-            losses_val.append(loss_val)
-        
-        # Update the progress bar    
-        progress_bar.set_postfix({'loss_train': loss_train, 'loss_val': loss_val})
-        
-    return {
-        'model': model,
-        'losses_train': losses_train,
-        'losses_val': losses_val
-    }
-
-
-
-def custom_train(
-    train_loader : torch.utils.data.DataLoader,
-    val_loader   : torch.utils.data.DataLoader,
-    model        : torch.nn.Module,
-    optimizer    : torch.optim.Optimizer,
-    criterion,
-    device       : torch.device,
-    n_epochs     : int,
-):
-    progress_bar = tqdm.tqdm(range(n_epochs), desc='Training')
-    losses_train = []
-    losses_val = []
-    
-    for epoch in progress_bar:
-        model.train()
-        for X, y in train_loader:
-            # Move the data to the device
-            X, y = X.to(device), y.to(device)
-            
-            # Reset the gradients
-            optimizer.zero_grad()
-            
-            # Compute the prediction
-            y_pred = model(X)
-            
-            # Compute the loss
-            loss = 0
-            for i in range(y_pred.shape[1]):
-                loss += criterion(y_pred[:, i, :], y[:, i])
-            
-            # Update the model
-            loss.backward()
-            optimizer.step()
-        
-        # Evaluate the model on the validation set
-        model.eval()
-        with torch.no_grad():
-            loss_train = 0
-            n_elements = 0
-            for X, y in train_loader:
-                # Move the data to the device
-                X, y = X.to(device), y.to(device)
-                
-                # Compute the prediction
-                y_pred = model(X)
-                
-                # Compute the loss
-                loss = 0
-                for i in range(y_pred.shape[1]):
-                    loss += criterion(y_pred[:, i, :], y[:, i])
-                
-                # Update the loss
-                loss_train += loss.item()
-                n_elements += 1
-            loss_train /= n_elements
-            losses_train.append(loss_train)
-            
-            loss_val = 0
-            n_elements = 0
-            for X, y in val_loader:
-                # Move the data to the device
-                X, y = X.to(device), y.to(device)
-                
-                # Compute the prediction
-                y_pred = model(X)
-                
-                # Compute the loss
-                loss = 0
-                for i in range(y_pred.shape[1]):
-                    loss += criterion(y_pred[:, i, :], y[:, i])
-                
-                # Update the loss
-                loss_val += loss.item()
-                n_elements += 1
-            loss_val /= n_elements
-            losses_val.append(loss_val)
-        
-        # Update the progress bar    
-        progress_bar.set_postfix({'loss_train': loss_train, 'loss_val': loss_val})
-        
-    return {
-        'model': model,
-        'losses_train': losses_train,
-        'losses_val': losses_val
-    }
-
-
-
-def evaluate(
-    loader   : torch.utils.data.DataLoader,
-    model    : torch.nn.Module,
-    criterion,
-    device   : torch.device,
-):
-    true = []
-    pred = []
-    losses = []
-    
-    model.eval()
-    with torch.no_grad():
-        loss = 0
-        for X, y in loader:
-            # Move the data to the device
-            X, y = X.to(device), y.to(device)
-            # Compute the prediction
-            y_pred = model(X)
-            
-            # Reshape 128,1,1 to 128,1
-            y_pred = y_pred.squeeze()
-            y = y.squeeze()
-            
-            
-            # Save the true and predicted values
-            true.append(y.cpu().numpy())
-            pred.append(y_pred.cpu().numpy())
-                        
-            # Compute the loss
-            loss = criterion(y_pred, y)
-            losses.append(loss.item())
-    
-    return {
-        'true': true,
-        'pred': pred,
-        'losses': losses
-    }
-    
-
-class Metrics:
-    
-    def __init__(self) -> None:
-        pass
-    
-    @staticmethod
-    def sMAPE(y_true, y_pred):
-        return 100 * np.mean(2 * np.abs(y_pred - y_true) / (np.abs(y_true) + np.abs(y_pred)))
+def make_progress_bar(counter, iterations, suffix=''):
+    bar_length = 50
+    filled_up_Length = int(round(bar_length* counter / float(iterations)))
+    percentage = round(100.0 * counter/float(iterations),1)
+    bar = '=' * filled_up_Length + '-' * (bar_length - filled_up_Length)
+    sys.stdout.write('[%s] %s%s %s\n' %(bar, percentage, '%', suffix))
+    sys.stdout.flush()
 
 
 
 
-class ModelTools:
-    
-    def __init__(self) -> None:
-        pass
-    
-    @staticmethod
-    def save_model(model, path, full=False):
-        if full:
-            torch.save(model, path)
-        else:
-            torch.save(model.state_dict(), path)
-
-    @staticmethod
-    def build_model(model_class, params):
-        model = model_class(**params)
-        return model
-
-    @staticmethod
-    def ht_train_wrapper(dataset_train, dataset_val, model_class, params, device):
-        batch_size = params['batch_size']
-        n_epochs = params['n_epochs']
-        lr = params['lr']
-        # Delete the keys
-        del params['batch_size']
-        del params['n_epochs']
-        del params['lr']
-        # Build the data loaders
-        train_loader = Dataset.TimeSeriesLoader(
-            dataset = dataset_train,
-            batch_size = batch_size,
-            shuffle=True
-        )
-        val_loader = Dataset.TimeSeriesLoader(
-            dataset = dataset_val,
-            batch_size = batch_size,
-            shuffle=False
-        )
-        # Build the model
-        model = ModelTools.build_model(model_class, params).to(device)
-        # Build the optimizer and the loss function
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-        criterion = torch.nn.CrossEntropyLoss()
-        # Train the model
-        results = custom_train(
-            train_loader = train_loader,
-            val_loader = val_loader,
-            model = model,
-            optimizer = optimizer,
-            criterion = criterion,
-            device = device,
-            n_epochs = n_epochs
-        )
-        # Average the last 5 losses on the validation set
-        avg_loss = np.mean(results['losses_val'][-5:])
-
-        # Model name
-        model_name = f'{model_class.__name__}_{batch_size}_{n_epochs}_{lr}_{avg_loss:.2f}'
-        # Save the model
-        ModelTools.save_model(model, f'../Models/{model_name}.pth')
-        
-        # Return negative loss, since the bayesian optimization is a maximization problem
-        return -avg_loss
 
 
 class DataTools:
     
     def __init__(self) -> None:
         pass
-    
     
     @staticmethod
     def split_x_y(df, target):
@@ -324,8 +36,11 @@ class DataTools:
         return X.values, y.values
     
     @staticmethod
-    def numpy_to_tensor(*args, device, dtype):
-        return [torch.tensor(arg, dtype=dtype).to(device) for arg in args]
+    def numpy_to_tensor(*args, device=None, dtype):
+        if device is None:
+            return [torch.tensor(arg, dtype=dtype) for arg in args]
+        else:
+            return [torch.tensor(arg, dtype=dtype).to(device) for arg in args]
     
     @staticmethod
     def train_val_test_split(df, train_size=0.7, val_size=0.15, test_size=0.15):
@@ -379,17 +94,181 @@ class DataTools:
                 test_set = test
             
             yield train_set, val_set, test_set
-        
 
+
+
+
+class ModelTools:
+    
+    def __init__(self) -> None:
+        pass
+    
+    @staticmethod
+    def save_model(model, path, full=False):
+        if full:
+            torch.save(model, path)
+        else:
+            torch.save(model.state_dict(), path)
+
+    @staticmethod
+    def build_model(model_class, params):
+        model = model_class(**params)
+        return model
+
+    @staticmethod
+    def ht_train_wrapper(dataset_train, dataset_val, model_class, params, device, criterion):
+        batch_size = params['batch_size']
+        n_epochs = params['n_epochs']
+        lr = params['lr']
+        # Delete the keys
+        del params['batch_size']
+        del params['n_epochs']
+        del params['lr']
+        # Build the data loaders
+        train_loader = Dataset.TimeSeriesLoader(
+            dataset = dataset_train,
+            batch_size = batch_size,
+            shuffle=True
+        )
+        val_loader = Dataset.TimeSeriesLoader(
+            dataset = dataset_val,
+            batch_size = batch_size,
+            shuffle=False
+        )
+        # Build the model
+        model = ModelTools.build_model(model_class, params).to(device)
+        # Build the optimizer and the loss function
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        # Train the model
+        results = ModelTools.train(
+            model_id = 'ht_model',
+            train_loader = train_loader,
+            val_loader = val_loader,
+            model = model,
+            optimizer = optimizer,
+            criterion = criterion,
+            device = device,
+            n_epochs = n_epochs,
+            save=False
+        )
+        # Average the last 5 losses on the validation set
+        avg_loss = np.mean(results['val_loss'][-5:])
         
-if __name__ == '__main__':
-    # Test the cross_fold_timeseries function
-    df = pd.read_parquet('../Data/FI-2010-Cleaned/NoAuction/Zscore/KESBV.parquet')
-    for train_set, val_set, test_set in DataTools.cross_fold_timeseries(df):
-        print('Train:', train_set['Day'].unique())
-        print('shape:', train_set.shape)
-        print('Val:', val_set['Day'].unique())
-        print('shape:', val_set.shape)
-        print('Test:', test_set['Day'].unique())
-        print('shape:', test_set.shape)
-        print()
+        # Return negative loss, since the bayesian optimization is a maximization problem
+        return -avg_loss
+
+    @staticmethod
+    def train(model_id, model, criterion, optimizer, train_loader, val_loader, n_epochs, save:bool, device):
+        training_info = {
+            'train_loss': [],
+            'val_loss': [],
+        }
+        best_val_loss = np.inf
+        best_val_epoch = np.inf
+
+        progress_bar = tqdm(range(n_epochs), desc='Training')
+
+        for epoch in progress_bar:
+            train_loss = []
+            train_accuracy = []
+            
+            # train the model
+            model.train()
+            
+            for inputs, labels in train_loader:
+                # move data to GPU, if available
+                inputs, labels = inputs.to(device), labels.to(device)
+                # zero the parameter gradients
+                optimizer.zero_grad()
+                # Forward pass
+                outputs = model(inputs)
+                # calculate the loss
+                loss = criterion(outputs, labels)
+                # Backward and optimize
+                loss.backward()
+                optimizer.step()
+                # store the performances on the train set directly during the training epochs
+                train_loss.append(loss.item())
+            # Get train loss and val loss
+            train_loss = np.mean(train_loss, dtype=np.float64)
+            
+
+            # evaluate the model after an epoch of training
+            model.eval()
+            val_loss = []
+            with torch.no_grad():
+                for inputs, labels in val_loader:
+                    inputs, labels = inputs.to(device), labels.to(device)
+                    outputs = model(inputs)
+                    loss = criterion(outputs, labels)
+                    val_loss.append(loss.item())
+            val_loss = np.mean(val_loss, dtype=np.float64)
+
+            # save the results after each training epoch
+            training_info['train_loss'].append(train_loss)
+            training_info['val_loss'].append(val_loss)
+
+            # save the model if the validation loss is the best so far
+            saving_path = './saved_models/' + model_id
+            if (val_loss < best_val_loss and save):
+                torch.save(model, os.path.join(saving_path, 'best_model.pt'))
+                best_val_loss = val_loss
+                best_val_epoch = epoch
+                print('model saved')
+            
+            # stat_file = open('./stats/' + model_id + '.txt', 'a')
+            # stat_file.write(f'{epoch+1},{train_loss},{val_loss}')
+            # stat_file.close()
+            progress_bar.set_postfix({'loss_train': train_loss, 'loss_val': val_loss})
+        
+        # save the final results after the training
+        if save:
+            torch.save({
+                'epoch': n_epochs,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': train_loss,
+            }, os.path.join(saving_path, 'checkpoint.pt'))
+
+            with open(os.path.join(saving_path, 'training_process.pkl'), 'wb') as f:
+                pickle.dump(training_info, f)
+
+        return training_info
+    
+    def evaluate(dataloader, model, accname, loss, regression:bool, device):
+        # torch.no_grad() is used only for the assessing/validation phase only. 
+        # When you only perform validation, gradients are not needed for backward phase.
+        true = []
+        pred = []
+        with torch.no_grad():
+            for inputs, labels in dataloader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                
+                true.append(inputs)
+                pred.append(outputs)
+        
+        true = np.array(true)
+        pred = np.array(pred)
+
+        return true, pred
+
+
+
+
+class Metrics:
+    
+    def __init__(self) -> None:
+        pass
+    
+    @staticmethod
+    def sMAPE(y_true, y_pred):
+        return 100 * np.mean(2 * np.abs(y_pred - y_true) / (np.abs(y_true) + np.abs(y_pred)))
+        
+        
+        
+def loss_fn(y_pred, y, criterion = nn.CrossEntropyLoss() ):
+    loss = 0
+    for i in range(y_pred.shape[1]):
+        loss += criterion(y_pred[:, i, :], y[:, i])
+    return loss
