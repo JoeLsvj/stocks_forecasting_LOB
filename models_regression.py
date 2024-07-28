@@ -316,7 +316,7 @@ class LobCNN(nn.Module):
         )
 
         # RNN or LSTM layer(s)
-        self.dropout = nn.Dropout(self.dropout)
+        self.Dropout = nn.Dropout(self.dropout)
         #self.encoder_gru = nn.GRU(input_size=self.inception_channels*4, hidden_size=self.inception_channels, num_layers=self.lstm_layers, batch_first=True)
         self.encoder_lstm = nn.LSTM(input_size=self.inception_channels*4, hidden_size=self.latent_size, num_layers=self.lstm_layers, batch_first=True)
         
@@ -344,7 +344,7 @@ class LobCNN(nn.Module):
         x = torch.cat((x_inception_1, x_inception_2, x_inception_3, x_inception_4), dim=1)
         x = x.permute(0, 2, 1, 3)#.squeeze(3)
         x = torch.reshape(x, (-1, x.shape[1], x.shape[2]))
-        x = self.dropout(x)
+        x = self.Dropout(x)
 
         h0 = torch.zeros(self.lstm_layers, x.size(0), self.latent_size).to(self.device)
         c0 = torch.zeros(self.lstm_layers, x.size(0), self.latent_size).to(self.device)
