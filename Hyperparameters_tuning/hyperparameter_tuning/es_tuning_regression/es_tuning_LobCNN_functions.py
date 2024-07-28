@@ -111,7 +111,8 @@ def fitness_evaluation(
     "lstm_layers" : 2,
     "latent_size" : individual.structure_solution[0],
     "dropout" : individual.dropout_solution,
-    "output_size" : output_size,}
+    "output_size" : output_size,
+}
 
     model = Models.LobCNN(**params).to(device)
 
@@ -121,7 +122,7 @@ def fitness_evaluation(
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    # Train the modelindividual.structure_solution[1]
+    # Train the model
     training_info = utils.ModelTools.train(
         model_id = model.name,
         model = model,

@@ -129,15 +129,15 @@ class LSTMWithAttention(nn.Module):
 
         self.init_weights()
 
-    def Attention(self, encoder_outputs, decoder_hidden=None, decoder_hidden_size=None):
+    def Attention(self, encoder_outputs, encoder_hidden=None, encoder_hidden_size=None):
         # encoder_outputs: (batch, lookback_period, hidden_dim)
-        # decoder_hidden:  (batch, hidden_dim)
+        # encoder_hidden:  (batch, hidden_dim)
         # 1st way to compute context vector:
-        scores = torch.bmm(encoder_outputs, decoder_hidden.unsqueeze(2)).squeeze(2)             # (batch, lookback_period)
+        scores = torch.bmm(encoder_outputs, encoder_hidden.unsqueeze(2)).squeeze(2)             # (batch, lookback_period)
         attention_weights = F.softmax(scores, dim=1)                                            # (batch, lookback_period)
         context_vector = torch.bmm(attention_weights.unsqueeze(1), encoder_outputs).squeeze(1)  # (batch, hidden_dim)
         # 2nd way to compute context vector:
-        #linear_attention = nn.Linear(decoder_hidden_size, 1)
+        #linear_attention = nn.Linear(encoder_hidden_size, 1)
         #attention_weights = torch.softmax(linear_attention(encoder_outputs).squeeze(-1), dim=-1)
         #context_vector = torch.sum(encoder_outputs * attention_weights.unsqueeze(-1), dim=1)
         return context_vector, attention_weights
@@ -147,14 +147,14 @@ class LSTMWithAttention(nn.Module):
         batchsize = x.shape[0]
         # shapes of the following outputs are:
         # encoder_outputs = [batch, lookback_period, encoder_hidden_size]
-        # encoder_h_c = [num_layers, batch, encoder_hidden_size]
-        encoder_outputs, (encoder_h_c, encoder_c_n) = self.encoder(x)
+        # encoder_h_n = [num_layers, batch, encoder_hidden_size]
+        encoder_outputs, (encoder_h_n, encoder_c_n) = self.encoder(x)
         # context_vector = [batch, encoder_hidden_size]
-        context_vector, attn_weights = self.Attention(encoder_outputs, encoder_h_c[-1], self.encoder_hidden_size)
+        context_vector, attn_weights = self.Attention(encoder_outputs, encoder_h_n[-1], self.encoder_hidden_size)
 
         # version 1
         # dec_input -> [num_layers+1, batch, encoder_hidden_size] +1 for the context vector
-        #dec_input = torch.cat([encoder_h_c, context_vector.unsqueeze(0)], dim=0)
+        #dec_input = torch.cat([encoder_h_n, context_vector.unsqueeze(0)], dim=0)
         ## dec_input -> [batch, num_layers+1, encoder_hidden_size]
         #dec_input = dec_input.permute(1, 0, 2)
 
@@ -163,7 +163,7 @@ class LSTMWithAttention(nn.Module):
         dec_input = torch.cat([encoder_outputs, context_vector.unsqueeze(1)], dim=1)
 
         # lstm decoder layer
-        output, (decoder_h_c, decoder_c_n) = self.decoder(dec_input) # encoder_h_c, encoder_c_n
+        output, (decoder_h_c, decoder_c_n) = self.decoder(dec_input, (encoder_h_n, encoder_c_n))
         x = decoder_h_c.permute(1, 0, 2).reshape(batchsize, -1)
         # final linear layer
         x = self.dropout(x)
@@ -197,6 +197,7 @@ class LobCNN(nn.Module):
                     inception_channels = 64,
                     lstm_layers = 2,
                     latent_size = 64,
+                    dropout = 0.2,
                     output_size = 1,
                 ):
         super(LobCNN, self).__init__()
@@ -211,6 +212,7 @@ class LobCNN(nn.Module):
         self.inception_channels = inception_channels
         self.lstm_layers = lstm_layers
         self.latent_size = latent_size
+        self.dropout = dropout
         self.output_size = output_size
         # The value of the smoothing can be computed with (if smoothing == True):
         # vertical_kernel_size = int(smoothing_percentage * lookback_period/vertical_convolutional_layers) + 1
@@ -314,13 +316,13 @@ class LobCNN(nn.Module):
         )
 
         # RNN or LSTM layer(s)
-        self.dropout = nn.Dropout(0.2)
+        self.Dropout = nn.Dropout(self.dropout)
         #self.encoder_gru = nn.GRU(input_size=self.inception_channels*4, hidden_size=self.inception_channels, num_layers=self.lstm_layers, batch_first=True)
         self.encoder_lstm = nn.LSTM(input_size=self.inception_channels*4, hidden_size=self.latent_size, num_layers=self.lstm_layers, batch_first=True)
         
         # Output FCNN
         self.fcnn_out = nn.Sequential(
-            nn.Dropout(0.1),
+            nn.Dropout(self.dropout),
             nn.Linear(self.latent_size, self.latent_size),
             nn.LeakyReLU(),
             nn.Linear(self.latent_size, self.output_size)
@@ -342,7 +344,7 @@ class LobCNN(nn.Module):
         x = torch.cat((x_inception_1, x_inception_2, x_inception_3, x_inception_4), dim=1)
         x = x.permute(0, 2, 1, 3)#.squeeze(3)
         x = torch.reshape(x, (-1, x.shape[1], x.shape[2]))
-        x = self.dropout(x)
+        x = self.Dropout(x)
 
         h0 = torch.zeros(self.lstm_layers, x.size(0), self.latent_size).to(self.device)
         c0 = torch.zeros(self.lstm_layers, x.size(0), self.latent_size).to(self.device)
