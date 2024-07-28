@@ -19,6 +19,12 @@ def make_progress_bar(counter, iterations, suffix=''):
     sys.stdout.flush()
 
 
+def loss_fn(y_pred, y, criterion = torch.nn.CrossEntropyLoss() ):
+    loss = 0
+    for i in range(y_pred.shape[1]):
+        loss += criterion(y_pred[:, i, :], y[:, i])
+    return loss
+
 
 
 
