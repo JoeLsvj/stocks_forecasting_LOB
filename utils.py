@@ -27,8 +27,6 @@ def loss_fn(y_pred, y, criterion = torch.nn.CrossEntropyLoss() ):
 
 
 
-
-
 class DataTools:
     
     def __init__(self) -> None:
@@ -102,7 +100,6 @@ class DataTools:
 
 
 
-
 class ModelTools:
     
     def __init__(self) -> None:
@@ -161,6 +158,7 @@ class ModelTools:
         
         # Return negative loss, since the bayesian optimization is a maximization problem
         return -avg_loss
+
 
     @staticmethod
     def train(model_id, model, criterion, optimizer, train_loader, val_loader, n_epochs, save:bool, device):
@@ -257,7 +255,6 @@ class ModelTools:
         pred = np.array(pred)
 
         return true, pred
-
 
 
 
