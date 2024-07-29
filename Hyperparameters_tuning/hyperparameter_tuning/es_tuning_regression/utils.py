@@ -27,19 +27,19 @@ def loss_fn(y_pred, y, criterion = torch.nn.CrossEntropyLoss() ):
 
 
 
-
-
 class DataTools:
     
     def __init__(self) -> None:
         pass
     
+
     @staticmethod
     def split_x_y(df, target):
         X = df.drop(target, axis=1)
         y = df[target]
         return X.values, y.values
     
+
     @staticmethod
     def numpy_to_tensor(*args, device=None, dtype):
         if device is None:
@@ -47,6 +47,7 @@ class DataTools:
         else:
             return [torch.tensor(arg, dtype=dtype).to(device) for arg in args]
     
+
     @staticmethod
     def train_val_test_split(df, train_size=0.7, val_size=0.15, test_size=0.15):
         assert train_size + val_size + test_size == 1, 'The sum of the sizes must be equal to 1'
@@ -102,12 +103,12 @@ class DataTools:
 
 
 
-
 class ModelTools:
     
     def __init__(self) -> None:
         pass
     
+
     @staticmethod
     def save_model(model, path, full=False):
         if full:
@@ -115,10 +116,12 @@ class ModelTools:
         else:
             torch.save(model.state_dict(), path)
 
+
     @staticmethod
     def build_model(model_class, params):
         model = model_class(**params)
         return model
+
 
     @staticmethod
     def ht_train_wrapper(dataset_train, dataset_val, model_class, params, device, criterion):
@@ -161,6 +164,7 @@ class ModelTools:
         
         # Return negative loss, since the bayesian optimization is a maximization problem
         return -avg_loss
+
 
     @staticmethod
     def train(model_id, model, criterion, optimizer, train_loader, val_loader, n_epochs, save:bool, device):
@@ -214,9 +218,15 @@ class ModelTools:
             training_info['val_loss'].append(val_loss)
 
             # save the model if the validation loss is the best so far
-            saving_path = './saved_models/' + model_id
+            saving_path = '/home/joel/Desktop/DSSC/DEEP_LEARNING/stocks_forecasting_LOB/ModelsCheckpoints/regression/best_models/'
             if (val_loss < best_val_loss and save):
-                torch.save(model, os.path.join(saving_path, 'best_model.pt'))
+                torch.save(model, os.path.join(saving_path, f'{model_id}-FI-best_model.pt'))
+                torch.save({
+                    'epoch': n_epochs,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': train_loss,
+                }, os.path.join(saving_path, f'{model_id}-FI-best_weights.pt'))
                 best_val_loss = val_loss
                 best_val_epoch = epoch
                 print('model saved')
@@ -233,13 +243,99 @@ class ModelTools:
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': train_loss,
-            }, os.path.join(saving_path, 'checkpoint.pt'))
+            }, os.path.join(saving_path, f'{model_id}-FI-final_checkpoint.pt'))
 
-            with open(os.path.join(saving_path, 'training_process.pkl'), 'wb') as f:
+            with open(os.path.join(saving_path, f'{model_id}-FI-training_process.pkl'), 'wb') as f:
                 pickle.dump(training_info, f)
 
         return training_info
-    
+
+
+    @staticmethod
+    def train_seq_to_seq(model_id, model, teacher_forcing_ratio, criterion, optimizer, train_loader, val_loader, n_epochs, save:bool, device):
+        training_info = {
+            'train_loss': [],
+            'val_loss': [],
+        }
+        best_val_loss = np.inf
+        best_val_epoch = np.inf
+
+        progress_bar = tqdm(range(n_epochs), desc='Training')
+
+        for epoch in progress_bar:
+            train_loss = []
+            train_accuracy = []
+            
+            # train the model
+            model.train()
+            
+            for inputs, labels in train_loader:
+                # move data to GPU, if available
+                inputs, labels = inputs.to(device), labels.to(device)
+                # zero the parameter gradients
+                optimizer.zero_grad()
+                # Forward pass
+                outputs = model(inputs, labels, teacher_forcing_ratio=teacher_forcing_ratio)
+                # calculate the loss
+                loss = criterion(outputs, labels)
+                # Backward and optimize
+                loss.backward()
+                optimizer.step()
+                # store the performances on the train set directly during the training epochs
+                train_loss.append(loss.item())
+            # Get train loss and val loss
+            train_loss = np.mean(train_loss, dtype=np.float64)
+            
+
+            # evaluate the model after an epoch of training
+            model.eval()
+            val_loss = []
+            with torch.no_grad():
+                for inputs, labels in val_loader:
+                    inputs, labels = inputs.to(device), labels.to(device)
+                    outputs = model(inputs, labels, teacher_forcing_ratio=0.)
+                    loss = criterion(outputs, labels)
+                    val_loss.append(loss.item())
+            val_loss = np.mean(val_loss, dtype=np.float64)
+
+            # save the results after each training epoch
+            training_info['train_loss'].append(train_loss)
+            training_info['val_loss'].append(val_loss)
+
+            # save the model if the validation loss is the best so far
+            saving_path = '/home/joel/Desktop/DSSC/DEEP_LEARNING/stocks_forecasting_LOB/ModelsCheckpoints/regression/best_models/'
+            if (val_loss < best_val_loss and save):
+                torch.save(model, os.path.join(saving_path, f'{model_id}-FI-best_model.pt'))
+                torch.save({
+                    'epoch': n_epochs,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': train_loss,
+                }, os.path.join(saving_path, f'{model_id}-FI-best_weights.pt'))
+                best_val_loss = val_loss
+                best_val_epoch = epoch
+                print('model saved')
+            
+            # stat_file = open('./stats/' + model_id + '.txt', 'a')
+            # stat_file.write(f'{epoch+1},{train_loss},{val_loss}')
+            # stat_file.close()
+            progress_bar.set_postfix({'loss_train': train_loss, 'loss_val': val_loss})
+        
+        # save the final results after the training
+        if save:
+            torch.save({
+                'epoch': n_epochs,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': train_loss,
+            }, os.path.join(saving_path, f'{model_id}-FI-final_checkpoint.pt'))
+
+            with open(os.path.join(saving_path, f'{model_id}-FI-training_process.pkl'), 'wb') as f:
+                pickle.dump(training_info, f)
+
+        return training_info
+
+
     def evaluate(dataloader, model, accname, loss, regression:bool, device):
         # torch.no_grad() is used only for the assessing/validation phase only. 
         # When you only perform validation, gradients are not needed for backward phase.
@@ -257,7 +353,6 @@ class ModelTools:
         pred = np.array(pred)
 
         return true, pred
-
 
 
 

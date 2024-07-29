@@ -102,15 +102,13 @@ def fitness_evaluation(
         #dropout,
         device): 
 
-        # Create the model
         params = {
-            'input_size': input_size,
-            'output_size': output_size,
-            'encoder_hidden_size': individual.structure_solution[0],
-            'decoder_hidden_size': individual.structure_solution[1],
-            'num_layers': 2,
-            'dropout': individual.dropout_solution
-        }
+        'input_size': input_size,
+        'output_size': output_size,
+        'encoder_hidden_size': individual.structure_solution[0],
+        'decoder_hidden_size': individual.structure_solution[0],
+        'num_layers': 2,
+        'dropout': individual.dropout_solution,}
 
         model = Models.LSTMSeq2SeqAttention(**params).to(device)
 
@@ -130,9 +128,8 @@ def fitness_evaluation(
             train_loader = training_data,
             val_loader = validation_data,
             n_epochs = epochs,
-            save = True,
-            device = model.device
-        )
+            save = False,
+            device = model.device)
 
         # Return the average of the last 5 validation losses
         return np.mean(training_info['val_loss'][-5:]) # return the average of the last 5 losses
@@ -596,7 +593,7 @@ def generate_offsprings(
         parent1, parent2 = tournament_selection(population = population, number_of_selected=2, percentage_of_population_size=tournament_percentage, heterogeneity=True)
 
         if random.random() < p_crossover_vs_mutation:
-            offspring1, offspring2 = structure_SPC_lineRecombination(parent1=parent1, parent2=parent2, k=structure_k_crossover, lb=structure_lb_size, ub=structure_ub_size)
+            offspring1, offspring2 = structure_lineRecombination_oneLayer(parent1=parent1, parent2=parent2, k=structure_k_crossover, lb=structure_lb_size, ub=structure_ub_size)
             offspring1, offspring2 = lr_linearRecombination(parent1=offspring1, parent2=offspring2, k = lr_k, lb = lr_lb, ub =lr_ub)
             offspring1, offspring2 = dropout_linearRecombination(parent1=offspring1, parent2=offspring2, k = dropout_k, lb = dropout_lb, ub =dropout_ub)
         else:
