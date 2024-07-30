@@ -15,7 +15,7 @@ class LSTM1(nn.Module):
 
         self.linear_1 = nn.Linear(input_size, self.hidden_layer_size)
         self.relu = nn.ReLU()
-        self.lstm = nn.LSTM(self.hidden_layer_size, hidden_size=self.self.hidden_layer_size, num_layers=self.num_layers, batch_first=True)
+        self.lstm = nn.LSTM(self.hidden_layer_size, hidden_size=self.hidden_layer_size, num_layers=self.num_layers, batch_first=True)
         self.dropout = nn.Dropout(dropout)
         self.linear_2 = nn.Linear(self.num_layers*self.hidden_layer_size, output_size)
         
@@ -115,11 +115,10 @@ class LSTMWithAttention(nn.Module):
 
     def __init__(self, input_size=1, 
                 encoder_hidden_size=32, 
-                encoder_layers=2, 
-                decoder_hidden_size=32, 
-                decoder_layers=2,
+                decoder_hidden_size=32,
+                num_layers = 2,
+                dropout=0.2,
                 output_size=1,
-                dropout=0.2
             ):
         super(LSTMWithAttention, self).__init__()
 
@@ -127,59 +126,80 @@ class LSTMWithAttention(nn.Module):
         self.name = 'LSTMAttention'
 
         self.encoder_hidden_size = encoder_hidden_size
-        self.encoder_layers = encoder_layers
         self.decoder_hidden_size = decoder_hidden_size
-        self.decoder_laye = decoder_layers
+        self.num_layers = num_layers
+        self.dropout = dropout
         self.output_size = output_size
 
-        self.encoder     = nn.LSTM(input_size, encoder_hidden_size, encoder_layers, batch_first=True)
-        self.decoder     = nn.LSTM(decoder_hidden_size, decoder_hidden_size, decoder_layers, batch_first=True)
-        self.relu        = nn.ReLU()
-        self.dropout     = nn.Dropout(dropout)
-        self.linear_out  = nn.Linear(decoder_layers*decoder_hidden_size, output_size)
+        self.relu = nn.ReLU()
+        #self.linear_out = nn.Linear(decoder_layers*decoder_hidden_size, output_size)
+        
+        # Encoder
+        self.encoder = nn.LSTM(input_size, encoder_hidden_size, num_layers, dropout=dropout, batch_first=True)
+        
+        # Attention mechanism
+        self.attn_layer = nn.Linear(encoder_hidden_size + decoder_hidden_size, decoder_hidden_size)
+        # generate the learnable parameters for attention scores:
+        self.v = nn.Parameter(torch.rand(decoder_hidden_size))
+        
+        # Decoder
+        self.decoder = nn.LSTM(encoder_hidden_size + 1, decoder_hidden_size, num_layers, dropout=dropout, batch_first=True)
+        self.fcnn = nn.Linear(decoder_hidden_size, 1)
 
         self.init_weights()
 
-    def Attention(self, encoder_outputs, encoder_hidden=None, encoder_hidden_size=None):
-        # encoder_outputs: (batch, lookback_period, hidden_dim)
-        # encoder_hidden:  (batch, hidden_dim)
-        # 1st way to compute context vector:
-        scores = torch.bmm(encoder_outputs, encoder_hidden.unsqueeze(2)).squeeze(2)             # (batch, lookback_period)
-        attention_weights = F.softmax(scores, dim=1)                                            # (batch, lookback_period)
-        context_vector = torch.bmm(attention_weights.unsqueeze(1), encoder_outputs).squeeze(1)  # (batch, hidden_dim)
-        # 2nd way to compute context vector:
-        #linear_attention = nn.Linear(encoder_hidden_size, 1)
-        #attention_weights = torch.softmax(linear_attention(encoder_outputs).squeeze(-1), dim=-1)
-        #context_vector = torch.sum(encoder_outputs * attention_weights.unsqueeze(-1), dim=1)
-        return context_vector, attention_weights
 
-    def forward(self, x):
-        # x = [batch, lookback_period, num_features]
-        batchsize = x.shape[0]
-        # shapes of the following outputs are:
-        # encoder_outputs = [batch, lookback_period, encoder_hidden_size]
-        # encoder_h_n = [num_layers, batch, encoder_hidden_size]
-        encoder_outputs, (encoder_h_n, encoder_c_n) = self.encoder(x)
-        # context_vector = [batch, encoder_hidden_size]
-        context_vector, attn_weights = self.Attention(encoder_outputs, encoder_h_n[-1], self.encoder_hidden_size)
+    def forward(self, x):#, target, teacher_forcing_ratio=0.5):
+        # x:        [batch_size, lookback_period, input_size]
+        # target:   [batch_size, 1, output_size]
+        batch_size  = x.size(0)
+        #trg_seq_len = target.size(1)
+        #output_size = target.size(2)
+        
+        # Placeholder for final decoder's outputs
+        outputs = torch.zeros(batch_size, 1, self.output_size).to(x.device)
+        # Encoder: h_n = hidden state, c_n = cell state
+        encoder_outputs, (h_n, c_n) = self.encoder(x)
+        # First input to the decoder
+        #tf_input = target[:, :, 0].unsqueeze(2)                                         # [batch_size, 1, output_size]
+        tf_input = torch.zeros(batch_size, 1, 1).to(x.device)
+        for t in range(1, self.output_size):
+            attn_weights = self.compute_attention_weights(encoder_outputs, h_n[-1])     # [batch_size, lookback_period]
+            context_vector = torch.bmm(attn_weights.unsqueeze(1), encoder_outputs)      # [batch_size, 1, encoder_hidden_size]
+            #print(context_vector.shape)
+            # Decoder input: concatenate input and context_vector
+            decoder_input = torch.cat((tf_input, context_vector), dim=2)                # [batch_size, 1, encoder_hidden_size + output_size]
+            #print(decoder_input.shape)
+            output, (h_n, c_n) = self.decoder(decoder_input, (h_n, c_n))
+            #print(output.shape)
+            prediction = self.fcnn(output.squeeze(1))                                   # [batch_size, output_size]
+            #print(prediction.shape)
+            outputs[:, :, t] = prediction
+            
+            #teacher_force = torch.rand(1).item() < teacher_forcing_ratio
+            tf_input = prediction.unsqueeze(1) #target[:, :, t].unsqueeze(1) if teacher_force else prediction.unsqueeze(1)
+            #print(tf_input.shape)
+        
+        return outputs
+    
 
-        # version 1
-        # dec_input -> [num_layers+1, batch, encoder_hidden_size] +1 for the context vector
-        #dec_input = torch.cat([encoder_h_n, context_vector.unsqueeze(0)], dim=0)
-        ## dec_input -> [batch, num_layers+1, encoder_hidden_size]
-        #dec_input = dec_input.permute(1, 0, 2)
+    def compute_attention_weights(self, encoder_outputs, h_n):
+        # encoder_outputs: [batch_size, seq_len, encoder_hidden_size]
+        # h_n: [batch_size, decoder_hidden_size]
+        seq_len = encoder_outputs.size(1)
+        
+        # Repeat h_n state seq_len times
+        h_n = h_n.unsqueeze(1).repeat(1, seq_len, 1)
+        
+        # Concatenate h_n and encoder outputs
+        intermediate_attn_scores = torch.tanh(self.attn_layer(torch.cat((h_n, encoder_outputs), dim=2)))    # [batch_size, seq_len, decoder_hidden_size]
+        intermediate_attn_scores = intermediate_attn_scores.permute(0, 2, 1)                                # [batch_size, decoder_hidden_size, seq_len]
+        
+        v = self.v.repeat(encoder_outputs.size(0), 1).unsqueeze(1)          # [batch_size, 1, decoder_hidden_size]
+        attn_scores = torch.bmm(v, intermediate_attn_scores).squeeze(1)     # [batch_size, seq_len]
+        
+        return F.softmax(attn_scores, dim=1)
 
-        # version 2
-        # dec_input -> [batch, lookback_period+1, encoder_hidden_size]
-        dec_input = torch.cat([encoder_outputs, context_vector.unsqueeze(1)], dim=1)
-
-        # lstm decoder layer
-        output, (decoder_h_n, decoder_c_n) = self.decoder(dec_input, (encoder_h_n, encoder_c_n))
-        x = decoder_h_n.permute(1, 0, 2).reshape(batchsize, -1)
-        # final linear layer
-        x = self.dropout(x)
-        predictions = self.linear_out(x)
-        return predictions.unsqueeze(1)
 
     def init_weights(self):
         for name, param in self.encoder.named_parameters():
@@ -196,6 +216,7 @@ class LSTMWithAttention(nn.Module):
                  nn.init.kaiming_normal_(param)
             elif 'weight_hh' in name:
                  nn.init.orthogonal_(param)
+
 
 
 class LobCNN(nn.Module):
@@ -805,38 +826,6 @@ class LobCNN_encoderdecoder_light(nn.Module):
                  nn.init.orthogonal_(param)
 
 
-## old functions with teacher forcing
-'''
-def prepare_decoder_input_regression(self, data:torch.Tensor, teacher_forcing:bool=False, depth:int=1):
-        # Assuming `data` is a PyTorch tensor of shape (batch_size, sequence_length, num_features)
-        batch_size, channels, sequence_length, num_features = data.shape
-        if teacher_forcing:
-            # Initialize the first decoder input with zeros or another chosen value
-            first_decoder_input = torch.zeros(batch_size, depth, num_features).to(self.device)
-            # Concatenate the data (excluding the last time step) with the first decoder input
-            decoder_input_data = torch.cat((first_decoder_input, data[:, :-depth, :]), dim=1)
-        else:
-            # Initialize the decoder input data with zeros (or another appropriate value)
-            decoder_input_data = torch.zeros(batch_size, depth, self.latent_size).to(self.device)
-        return decoder_input_data
-
-    def prepare_decoder_input_classification(self, data:torch.Tensor, teacher_forcing:bool=False):
-        # Assuming `data` is a PyTorch tensor of shape (batch_size, sequence_length, num_features)
-        batch_size, sequence_length, num_features = data.shape
-        if teacher_forcing:
-            # Create the first decoder input tensor with a categorical representation (one-hot encoding)
-            first_decoder_input = F.one_hot(torch.zeros(batch_size, dtype=torch.long), num_classes=3).float()
-            first_decoder_input = first_decoder_input.unsqueeze(1)  # Shape: (batch_size, 1, 3)
-            # Concatenate the data (excluding the last time step) with the first decoder input
-            decoder_input_data = torch.cat((data[:, :-1, :], first_decoder_input), dim=1)
-        else:
-            # Initialize the decoder input data with zeros and set the first category to 1
-            decoder_input_data = torch.zeros(batch_size, 1, 3)
-            decoder_input_data[:, 0, 0] = 1.
-        return decoder_input_data
-'''
-
-
 
 class LSTMSeq2SeqAttention(nn.Module):
     # The attention mechanism implemented in the code is inspired by the work of Luong et al. (2015), 
@@ -881,6 +870,8 @@ class LSTMSeq2SeqAttention(nn.Module):
         self.decoder_hidden_size = decoder_hidden_size
         self.decoder = nn.LSTM(encoder_hidden_size + output_size, decoder_hidden_size, num_layers, dropout=dropout, batch_first=True)
         self.fcnn = nn.Linear(decoder_hidden_size, output_size)
+
+        self.init_weights()
         
     def forward(self, x, target, teacher_forcing_ratio=0.5):
         # x:        [batch_size, lookback_period, input_size]
@@ -930,6 +921,23 @@ class LSTMSeq2SeqAttention(nn.Module):
         return F.softmax(attn_scores, dim=1)
 
 
+    def init_weights(self):
+        for name, param in self.encoder.named_parameters():
+            if 'bias' in name:
+                 nn.init.constant_(param, 0.0)
+            elif 'weight_ih' in name:
+                 nn.init.kaiming_normal_(param)
+            elif 'weight_hh' in name:
+                 nn.init.orthogonal_(param)
+        for name, param in self.decoder.named_parameters():
+            if 'bias' in name:
+                 nn.init.constant_(param, 0.0)
+            elif 'weight_ih' in name:
+                 nn.init.kaiming_normal_(param)
+            elif 'weight_hh' in name:
+                 nn.init.orthogonal_(param)
+
+
 
 class LobCNN_seq2seq_Attention(nn.Module):
     def __init__(   self,
@@ -939,7 +947,8 @@ class LobCNN_seq2seq_Attention(nn.Module):
                     convolution_channels = 32,
                     inception_channels = 64,
                     lstm_layers = 2,
-                    latent_size = 64,
+                    encoder_hidden_size = 64,
+                    decoder_hidden_size = 64,
                     dropout = 0.2,
                     output_size = 1,
                 ):
@@ -954,9 +963,9 @@ class LobCNN_seq2seq_Attention(nn.Module):
         self.convolution_channels = convolution_channels
         self.inception_channels = inception_channels
         self.lstm_layers = lstm_layers
-        self.latent_size = latent_size
+        self.encoder_hidden_size = encoder_hidden_size
+        self.decoder_hidden_size = decoder_hidden_size
         self.dropout = dropout
-        self.output_size = output_size
         # The value of the smoothing can be computed with (if smoothing == True):
         # vertical_kernel_size = int(smoothing_percentage * lookback_period/vertical_convolutional_layers) + 1
 
@@ -1058,23 +1067,34 @@ class LobCNN_seq2seq_Attention(nn.Module):
             nn.BatchNorm2d(self.inception_channels),
         )
 
-        # RNN or LSTM layer(s)
         self.Dropout = nn.Dropout(self.dropout)
-        #self.encoder_gru = nn.GRU(input_size=self.inception_channels*4, hidden_size=self.inception_channels, num_layers=self.lstm_layers, batch_first=True)
-        self.encoder_lstm = nn.LSTM(input_size=self.inception_channels*4, hidden_size=self.latent_size, num_layers=self.lstm_layers, batch_first=True)
         
-        # Output FCNN
-        self.fcnn_out = nn.Sequential(
-            nn.Dropout(self.dropout),
-            nn.Linear(self.latent_size, self.latent_size),
-            nn.LeakyReLU(),
-            nn.Linear(self.latent_size, self.output_size)
+        # Encoder
+        self.encoder_lstm = nn.LSTM(input_size=self.inception_channels*4,
+                                    hidden_size=encoder_hidden_size,
+                                    num_layers=lstm_layers,
+                                    dropout=dropout, 
+                                    batch_first=True
+                            )
+
+        # Attention mechanism
+        self.attn_layer = nn.Linear(encoder_hidden_size + decoder_hidden_size, decoder_hidden_size)
+        # generate the learnable parameters for attention scores:
+        self.v = nn.Parameter(torch.rand(decoder_hidden_size))
+        
+        # Decoder
+        self.decoder_lstm = nn.LSTM(input_size=encoder_hidden_size + output_size, 
+                                    hidden_size=decoder_hidden_size, 
+                                    num_layers=lstm_layers, 
+                                    dropout=dropout, 
+                                    batch_first=True
         )
+        self.fcnn = nn.Linear(decoder_hidden_size, output_size)
 
         self.init_weights()
 
 
-    def forward(self, x):
+    def forward(self, x, target, teacher_forcing_ratio=0.5):
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
@@ -1089,16 +1109,65 @@ class LobCNN_seq2seq_Attention(nn.Module):
         x = torch.reshape(x, (-1, x.shape[1], x.shape[2]))
         x = self.Dropout(x)
 
-        h0 = torch.zeros(self.lstm_layers, x.size(0), self.latent_size).to(self.device)
-        c0 = torch.zeros(self.lstm_layers, x.size(0), self.latent_size).to(self.device)
-        x, _ = self.encoder_lstm(x, (h0, c0))
-        x = x[:, -1, :]
+        print(x.shape)
+        # x:        convolutional output: [batch, lookback_period, inception_channels*4 ~ 256]
+        # target:   [batch_size, trg_seq_len, output_size]
+        batch_size  = x.size(0)
+        trg_seq_len = target.size(1)
+        output_size = target.size(2)
+        
+        # Placeholder for final decoder's outputs
+        outputs = torch.zeros(batch_size, trg_seq_len, output_size).to(x.device)
+        # Encoder: h_n = hidden state, c_n = cell state
+        #h0 = torch.zeros(self.lstm_layers, x.size(0), self.encoder_hidden_size).to(self.device)
+        #c0 = torch.zeros(self.lstm_layers, x.size(0), self.encoder_hidden_size).to(self.device)
+        encoder_outputs, (h_n, c_n) = self.encoder_lstm(x)#, (h0, c0))
+        # First input to the decoder
+        tf_input = target[:, 0, :].unsqueeze(1)                                         # [batch_size, 1, output_size]
+        
+        for t in range(1, trg_seq_len):
+            attn_weights = self.compute_attention_weights(encoder_outputs, h_n[-1])     # [batch_size, lookback_period]
+            context_vector = torch.bmm(attn_weights.unsqueeze(1), encoder_outputs)      # [batch_size, 1, encoder_hidden_size]
+            
+            # Decoder input: concatenate input and context_vector
+            decoder_input = torch.cat((tf_input, context_vector), dim=2)                # [batch_size, 1, encoder_hidden_size + output_size]
+            output, (h_n, c_n) = self.decoder_lstm(decoder_input, (h_n, c_n))
+            
+            prediction = self.fcnn(output.squeeze(1))                                   # [batch_size, output_size]
+            outputs[:, t, :] = prediction
+            
+            teacher_force = torch.rand(1).item() < teacher_forcing_ratio
+            tf_input = target[:, t, :].unsqueeze(1) if teacher_force else prediction.unsqueeze(1)
+        
+        return outputs.unsqueeze(-1)
+    
+    def compute_attention_weights(self, encoder_outputs, h_n):
+        # encoder_outputs: [batch_size, seq_len, encoder_hidden_size]
+        # h_n: [batch_size, decoder_hidden_size]
+        seq_len = encoder_outputs.size(1)
+        
+        # Repeat h_n state seq_len times
+        h_n = h_n.unsqueeze(1).repeat(1, seq_len, 1)
+        
+        # Concatenate h_n and encoder outputs
+        intermediate_attn_scores = torch.tanh(self.attn_layer(torch.cat((h_n, encoder_outputs), dim=2)))    # [batch_size, seq_len, decoder_hidden_size]
+        intermediate_attn_scores = intermediate_attn_scores.permute(0, 2, 1)                                # [batch_size, decoder_hidden_size, seq_len]
+        
+        v = self.v.repeat(encoder_outputs.size(0), 1).unsqueeze(1)          # [batch_size, 1, decoder_hidden_size]
+        attn_scores = torch.bmm(v, intermediate_attn_scores).squeeze(1)     # [batch_size, seq_len]
+        
+        return F.softmax(attn_scores, dim=1)
 
-        x = self.fcnn_out(x).unsqueeze(1).unsqueeze(1)
-        return x
 
     def init_weights(self):
         for name, param in self.encoder_lstm.named_parameters():
+            if 'bias' in name:
+                 nn.init.constant_(param, 0.0)
+            elif 'weight_ih' in name:
+                 nn.init.kaiming_normal_(param)
+            elif 'weight_hh' in name:
+                 nn.init.orthogonal_(param)
+        for name, param in self.decoder_lstm.named_parameters():
             if 'bias' in name:
                  nn.init.constant_(param, 0.0)
             elif 'weight_ih' in name:

@@ -122,7 +122,7 @@ def fitness_evaluation(
         training_info = utils.ModelTools.train_seq_to_seq(
             model_id = model.name,
             model = model,
-            teacher_forcing_ratio = 0.55,
+            teacher_forcing_ratio = 0.5,
             criterion = criterion,
             optimizer = optimizer,
             train_loader = training_data,
