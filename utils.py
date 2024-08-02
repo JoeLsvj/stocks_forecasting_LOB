@@ -231,7 +231,7 @@ class ModelTools:
                 best_val_epoch = epoch
                 print('model saved')
             
-            stat_file = open('/home/joel/Desktop/DSSC/DEEP_LEARNING/stocks_forecasting_LOB/ModelsCheckpoints/regression/training_stats' + model_id + '.txt', 'a')
+            stat_file = open('/home/joel/Desktop/DSSC/DEEP_LEARNING/stocks_forecasting_LOB/ModelsCheckpoints/regression/training_stats/' + model_id + '.txt', 'a')
             stat_file.write(f'{epoch+1}, {train_loss}, {val_loss}')
             stat_file.close()
             progress_bar.set_postfix({'loss_train': train_loss, 'loss_val': val_loss})

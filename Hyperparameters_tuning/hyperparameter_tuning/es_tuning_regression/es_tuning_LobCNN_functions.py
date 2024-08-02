@@ -135,7 +135,7 @@ def fitness_evaluation(
         device = model.device)
 
     # Return the average of the last 5 validation losses
-    return np.mean(training_info['val_loss'][-5:]) # return the average of the last 5 losses
+    return np.min(training_info['val_loss'][:]) # return the average of the last 5 losses
 
 
 
