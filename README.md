@@ -1,5 +1,5 @@
 # stocks_forecasting_LOB
-This repository contains all the material for the Deep Learning exam at @units
+This repository contains all the material for publication...
 
 - in CNN_LSTM.py: encoder of the deeplob model
 - in LSTM.py: LSTM solo models
